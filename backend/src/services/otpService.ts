@@ -1,6 +1,7 @@
 import { OTP } from '../models/OTP';
 import { User } from '../models/User';
 import jwt from 'jsonwebtoken';
+import { sendSMS, getActiveProvider } from './smsProviders';
 
 // Generate a 6-digit OTP
 export const generateOTP = (): string => {
@@ -32,32 +33,28 @@ export const sendOTP = async (phone: string, purpose: 'login' | 'register' | 'ky
 
         await otpRecord.save();
 
-        // In production, integrate with Twilio or other SMS provider
-        // For development, log the OTP
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`OTP for ${fullPhone}: ${otp}`);
+        // Use the new SMS provider service
+        const smsSent = await sendSMS(fullPhone, otp);
+
+        if (!smsSent) {
+            // Delete the OTP record if SMS failed to send so they can try again immediately
+            await OTP.findByIdAndDelete(otpRecord._id);
+            return {
+                success: false,
+                message: 'Failed to send OTP via SMS provider. Please try again later.'
+            };
         }
 
-        // TODO: Integrate with Twilio
-        // const client = require('twilio')(
-        //   process.env.TWILIO_ACCOUNT_SID,
-        //   process.env.TWILIO_AUTH_TOKEN
-        // );
-        // await client.messages.create({
-        //   body: `Your LocalKart OTP is ${otp}. Valid for 10 minutes.`,
-        //   from: process.env.TWILIO_PHONE_NUMBER,
-        //   to: fullPhone
-        // });
-
+        const provider = getActiveProvider();
         return {
             success: true,
-            message: 'OTP sent successfully'
+            message: `OTP sent successfully${provider !== 'console' ? ' via SMS' : ' (Dev Console Mode)'}`
         };
     } catch (error) {
         console.error('Error sending OTP:', error);
         return {
             success: false,
-            message: 'Failed to send OTP'
+            message: 'Failed to process OTP request'
         };
     }
 };
