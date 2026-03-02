@@ -5,15 +5,22 @@ import axios from 'axios';
 
 type SmsProvider = 'fast2sms' | '2factor' | 'console';
 
+// Helper to check if a key is a real key or just the .env placeholder
+const isValidKey = (key: string | undefined): boolean => {
+    if (!key) return false;
+    return !key.includes('your_');
+};
+
 // Auto-detect which provider to use based on env vars
 const getProvider = (): SmsProvider => {
     const explicit = process.env.SMS_PROVIDER?.toLowerCase();
-    if (explicit === 'fast2sms' && process.env.FAST2SMS_API_KEY) return 'fast2sms';
-    if (explicit === '2factor' && process.env.TWOFACTOR_API_KEY) return '2factor';
+
+    if (explicit === 'fast2sms' && isValidKey(process.env.FAST2SMS_API_KEY)) return 'fast2sms';
+    if (explicit === '2factor' && isValidKey(process.env.TWOFACTOR_API_KEY)) return '2factor';
 
     // Auto-detect from available keys
-    if (process.env.FAST2SMS_API_KEY) return 'fast2sms';
-    if (process.env.TWOFACTOR_API_KEY) return '2factor';
+    if (isValidKey(process.env.FAST2SMS_API_KEY)) return 'fast2sms';
+    if (isValidKey(process.env.TWOFACTOR_API_KEY)) return '2factor';
 
     return 'console';
 };
