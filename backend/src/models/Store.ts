@@ -66,6 +66,10 @@ const StoreSchema = new Schema<IStore>({
     freeDeliveryAbove: { type: Number, default: 500 },
     categories: [{ type: String }],
     tags: [{ type: String }],
+
+    // SECURITY TODO (H6): Encrypt PII fields (GSTIN, Aadhaar, PAN) at rest using AES-256-GCM 
+    // before saving to the database, and decrypt them only when accessed by authorized 
+    // admin personnel or verification services. Storing these in plaintext is a High severity risk.
     gstin: { type: String },
     aadhaarNumber: { type: String },
     panNumber: { type: String },

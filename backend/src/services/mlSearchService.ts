@@ -37,8 +37,8 @@ const calculateProductSimilarity = (searchTokens: string[], productTokens: strin
 // ML-based product search with relevance scoring
 export const mlProductSearch = async (
     query: string,
-    latitude: number,
-    longitude: number,
+    latitude?: number,
+    longitude?: number,
     filters: {
         category?: string;
         minPrice?: number;
@@ -99,7 +99,7 @@ export const mlProductSearch = async (
             // Calculate distance-based score if store location exists
             let distanceScore = 1;
             const storeData = product.storeId as any;
-            if (storeData && storeData.location) {
+            if (storeData && storeData.location && latitude !== undefined && longitude !== undefined) {
                 const distance = calculateDistance(
                     latitude,
                     longitude,

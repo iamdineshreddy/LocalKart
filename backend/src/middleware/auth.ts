@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
+import { getJwtSecret } from '../config/jwt';
 
 interface AuthRequest extends Request {
     user?: any;
@@ -17,7 +18,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 
         const token = authHeader.split(' ')[1];
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        const decoded = jwt.verify(token, getJwtSecret()) as any;
 
         const user = await User.findById(decoded.id);
 
@@ -49,7 +50,7 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
         }
 
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        const decoded = jwt.verify(token, getJwtSecret()) as any;
 
         const user = await User.findById(decoded.id);
         if (user && user.isActive) {
@@ -82,12 +83,17 @@ export const isSeller = (req: AuthRequest, res: Response, next: NextFunction): v
 };
 
 // Check if user is verified (phone verified)
-export const isVerified = (req: AuthRequest, res: Response, next: NextFunction): void => {
-    if (!req.user?.isVerified) {
-        res.status(403).json({ success: false, message: 'Please verify your phone number' });
-        return;
+export const isVerified = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const user = await User.findById(req.user?.id);
+        if (!user || !user.isVerified) {
+            res.status(403).json({ success: false, message: 'Please verify your phone number' });
+            return;
+        }
+        next();
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Verification check failed' });
     }
-    next();
 };
 
 // Check if KYC is completed

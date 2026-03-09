@@ -20,7 +20,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'buyer' | 'seller';
+  role: 'buyer' | 'seller' | 'admin';
   phone?: string;
   isVerified?: boolean;
   kycStatus?: KYCStatus;

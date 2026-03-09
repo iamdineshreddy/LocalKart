@@ -1,6 +1,6 @@
 import React from 'react';
-import { X, Home, ShoppingBag, User, Heart, Store, LogOut, MapPin } from 'lucide-react';
-import { User as UserType } from '../types';
+import { X, Home, ShoppingBag, User, Heart, Store, LogOut, MapPin, Shield } from 'lucide-react';
+import { User as UserType } from '../../types';
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -9,9 +9,15 @@ interface MobileMenuProps {
   user: UserType | null;
   onLogout: () => void;
   cartCount: number;
+  userLocation?: {
+    latitude: number | null;
+    longitude: number | null;
+    hasLocation: boolean;
+    loading: boolean;
+  };
 }
 
-const MobileMenu: React.FC<MobileMenuProps> = ({ isOpen, onClose, onNavigate, user, onLogout, cartCount }) => {
+const MobileMenu: React.FC<MobileMenuProps> = ({ isOpen, onClose, onNavigate, user, onLogout, cartCount, userLocation }) => {
   if (!isOpen) return null;
 
   const menuItems = [
@@ -21,7 +27,14 @@ const MobileMenu: React.FC<MobileMenuProps> = ({ isOpen, onClose, onNavigate, us
     { id: 'orders', label: 'Orders', icon: Store },
     { id: 'wishlist', label: 'Wishlist', icon: Heart },
     { id: 'profile', label: 'Profile', icon: User },
+    ...(user?.role === 'admin' ? [{ id: 'admin', label: 'Admin Panel', icon: Shield }] : []),
   ];
+
+  const locationLabel = userLocation?.loading
+    ? 'Detecting location...'
+    : userLocation?.hasLocation
+      ? `${userLocation.latitude!.toFixed(3)}°, ${userLocation.longitude!.toFixed(3)}°`
+      : 'Location unavailable';
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -36,12 +49,12 @@ const MobileMenu: React.FC<MobileMenuProps> = ({ isOpen, onClose, onNavigate, us
           </div>
 
           <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-2xl mb-6">
-            <div className="w-10 h-10 bg-blue-900 rounded-full flex items-center justify-center text-white">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${userLocation?.hasLocation ? 'bg-green-600' : 'bg-blue-900'}`}>
               <MapPin className="h-5 w-5" />
             </div>
             <div>
               <p className="font-bold text-sm text-slate-900">Instant Delivery</p>
-              <p className="text-xs text-slate-500">Downtown, 5th Avenue</p>
+              <p className="text-xs text-slate-500">{locationLabel}</p>
             </div>
           </div>
 
@@ -50,7 +63,8 @@ const MobileMenu: React.FC<MobileMenuProps> = ({ isOpen, onClose, onNavigate, us
               <button
                 key={item.id}
                 onClick={() => { onNavigate(item.id); onClose(); }}
-                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-all font-bold text-sm"
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm ${item.id === 'admin' ? 'text-amber-700 hover:bg-amber-50' : 'text-slate-700 hover:text-blue-600'
+                  }`}
               >
                 <item.icon className="h-5 w-5" />
                 {item.label}

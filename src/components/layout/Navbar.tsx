@@ -1,6 +1,6 @@
 import React from 'react';
-import { ShoppingCart, User, Store, Search, LogOut, MapPin, Menu, Heart } from 'lucide-react';
-import { User as UserType } from '../types';
+import { ShoppingCart, User, Store, Search, LogOut, MapPin, Menu, Heart, Shield, Loader2 } from 'lucide-react';
+import { User as UserType } from '../../types';
 
 interface NavbarProps {
   onNavigate: (page: string) => void;
@@ -10,26 +10,47 @@ interface NavbarProps {
   onMenuClick?: () => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  userLocation?: {
+    latitude: number | null;
+    longitude: number | null;
+    loading: boolean;
+    error: string | null;
+    hasLocation: boolean;
+    refresh: () => void;
+  };
 }
 
-const Navbar: React.FC<NavbarProps> = ({ onNavigate, cartCount, user, onLogout, onMenuClick, searchQuery = '', onSearchChange }) => {
+const Navbar: React.FC<NavbarProps> = ({ onNavigate, cartCount, user, onLogout, onMenuClick, searchQuery = '', onSearchChange, userLocation }) => {
+  const locationLabel = userLocation?.loading
+    ? 'Detecting...'
+    : userLocation?.hasLocation
+      ? `${userLocation.latitude!.toFixed(3)}°, ${userLocation.longitude!.toFixed(3)}°`
+      : 'Enable Location';
+
   return (
     <nav className="bg-white border-b border-slate-100 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 sm:h-20 items-center gap-4">
           <div className="flex items-center sm:gap-8">
-            <div 
+            <div
               className="flex items-center cursor-pointer group"
               onClick={() => onNavigate('home')}
             >
               <span className="text-xl sm:text-2xl brand-font text-blue-900 tracking-tighter">Local<span className="text-blue-600">Kart</span></span>
             </div>
 
-            <div className="hidden lg:flex items-center text-sm border-l border-slate-100 pl-6 cursor-pointer hover:opacity-80 transition-opacity">
-              <MapPin className="h-4 w-4 text-blue-600 mr-2 flex-shrink-0" />
+            <div
+              className="hidden lg:flex items-center text-sm border-l border-slate-100 pl-6 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => userLocation?.refresh?.()}
+            >
+              {userLocation?.loading ? (
+                <Loader2 className="h-4 w-4 text-blue-600 mr-2 flex-shrink-0 animate-spin" />
+              ) : (
+                <MapPin className={`h-4 w-4 mr-2 flex-shrink-0 ${userLocation?.hasLocation ? 'text-green-600' : 'text-blue-600'}`} />
+              )}
               <div className="truncate max-w-[150px]">
                 <p className="font-extrabold text-slate-900 leading-tight">Instant Delivery</p>
-                <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider truncate">Downtown, 5th Avenue</p>
+                <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider truncate">{locationLabel}</p>
               </div>
             </div>
           </div>
@@ -51,22 +72,34 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, cartCount, user, onLogout, 
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            <button 
+            <button
               onClick={() => onNavigate('wishlist')}
               className="hidden sm:flex items-center p-2 text-slate-600 hover:text-blue-900 font-bold text-xs uppercase tracking-wider transition-colors"
             >
               <Heart className="h-5 w-5" />
             </button>
-            
-            <button 
-              onClick={() => onNavigate('seller-dashboard')}
-              className="hidden sm:flex items-center space-x-1.5 text-slate-600 hover:text-blue-900 font-bold text-xs uppercase tracking-wider transition-colors"
-            >
-              <Store className="h-4 w-4" />
-              <span>Partner Log</span>
-            </button>
 
-            <button 
+            {user?.role === 'seller' && (
+              <button
+                onClick={() => onNavigate('seller-dashboard')}
+                className="hidden sm:flex items-center space-x-1.5 text-slate-600 hover:text-blue-900 font-bold text-xs uppercase tracking-wider transition-colors"
+              >
+                <Store className="h-4 w-4" />
+                <span>Partner Log</span>
+              </button>
+            )}
+
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => onNavigate('admin')}
+                className="hidden sm:flex items-center space-x-1.5 text-amber-600 hover:text-amber-800 font-bold text-xs uppercase tracking-wider transition-colors"
+              >
+                <Shield className="h-4 w-4" />
+                <span>Admin</span>
+              </button>
+            )}
+
+            <button
               onClick={() => onNavigate('cart')}
               className="relative bg-blue-900 text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl flex items-center space-x-2 hover:bg-blue-800 transition-all shadow-lg shadow-blue-200"
             >
@@ -80,7 +113,7 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, cartCount, user, onLogout, 
             </button>
 
             {user ? (
-              <button 
+              <button
                 onClick={onLogout}
                 className="p-2 text-slate-400 hover:text-red-500 transition-colors"
                 title="Logout"
@@ -88,14 +121,14 @@ const Navbar: React.FC<NavbarProps> = ({ onNavigate, cartCount, user, onLogout, 
                 <LogOut className="h-5 w-5" />
               </button>
             ) : (
-              <button 
+              <button
                 onClick={() => onNavigate('login')}
                 className="font-extrabold text-slate-700 hover:text-blue-600 transition-colors hidden sm:block"
               >
                 Sign In
               </button>
             )}
-            
+
             <button onClick={onMenuClick} className="md:hidden p-2 text-slate-600">
               <Menu className="h-6 w-6" />
             </button>

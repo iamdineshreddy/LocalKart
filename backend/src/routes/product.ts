@@ -13,25 +13,26 @@ import {
     getProductsByCategory
 } from '../controllers/productController';
 import { authenticate, isSeller, optionalAuth } from '../middleware/auth';
+import { productValidation } from '../middleware/validate';
 
 const router = Router();
 
-// Public routes
+// Public routes (static paths first)
 router.get('/search', optionalAuth, searchProducts);
 router.get('/suggestions', getSuggestions);
 router.get('/recommendations', optionalAuth, getRecommendations);
 router.get('/trending', getTrending);
 router.get('/category/:category', getProductsByCategory);
 router.get('/price-recommendations', getProductPriceRecommendations);
-router.get('/:productId', optionalAuth, getProductDetails);
 
-// Seller routes
-router.post('/', authenticate, isSeller, createProduct);
-router.put('/:productId', authenticate, isSeller, updateProduct);
-router.delete('/:productId', authenticate, isSeller, deleteProduct);
+// Seller routes (must come before /:productId wildcard)
 router.get('/seller/my-products', authenticate, isSeller, getMyProducts);
+router.post('/', authenticate, isSeller, productValidation, createProduct);
+router.put('/:productId', authenticate, isSeller, productValidation, updateProduct);
+router.delete('/:productId', authenticate, isSeller, deleteProduct);
 
-// Alias for getProductDetails
+// Wildcard routes LAST to prevent shadowing
 router.get('/details/:productId', getProductDetails);
+router.get('/:productId', optionalAuth, getProductDetails);
 
 export default router;

@@ -127,9 +127,17 @@ const HomePage: React.FC<HomePageProps> = ({
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-8 px-4">
                     {previousPurchases.map((product) => (
-                        <div key={product.id} className="bg-white p-3 rounded-[2rem] border border-slate-100 hover:shadow-lg transition-all group">
+                        <div
+                            key={product.id}
+                            onClick={() => { setSelectedProduct(product); setModalQuantity(1); }}
+                            className="bg-white p-3 rounded-[2rem] border border-slate-100 hover:shadow-lg transition-all group cursor-pointer"
+                        >
                             <div className="relative aspect-square rounded-[1.5rem] overflow-hidden bg-slate-50 mb-4">
-                                <img src={product.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                <img
+                                    src={product.imageUrl}
+                                    onError={(e) => { e.currentTarget.src = 'https://placehold.co/400x400/f8fafc/94a3b8?text=Image+Unavailable'; }}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                />
                                 <button
                                     onClick={(e) => { e.stopPropagation(); toggleWishlist(product); }}
                                     className={`absolute top-3 right-3 p-2 rounded-full transition-all ${isFavorite(product.id) ? 'bg-red-50 text-red-500' : 'bg-white/80 text-slate-400 hover:text-red-500'}`}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Product } from '../types';
+import { Product } from '../../types';
 import { Heart, Plus } from 'lucide-react';
 
 interface ProductCardProps {
@@ -13,7 +13,12 @@ interface ProductCardProps {
 const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onOpenModal, isFavorite, onToggleFavorite }) => (
     <div className="bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:shadow-2xl hover:shadow-blue-500/5 transition-all group flex flex-col p-2 h-full cursor-pointer" onClick={onOpenModal}>
         <div className="relative aspect-square rounded-[1.5rem] overflow-hidden bg-slate-50">
-            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out" />
+            <img
+                src={product.imageUrl}
+                alt={product.name}
+                onError={(e) => { e.currentTarget.src = 'https://placehold.co/400x400/f8fafc/94a3b8?text=Image+Unavailable'; }}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+            />
             <div className="absolute top-3 left-3">
                 <span className="bg-white/90 backdrop-blur-md text-slate-900 px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest shadow-sm">
                     {product.category.split(' & ')[0]}

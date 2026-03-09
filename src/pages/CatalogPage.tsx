@@ -1,7 +1,7 @@
 import React from 'react';
 import { Product, Category } from '../types';
 import ProductCard from '../components/ui/ProductCard';
-import { Search } from 'lucide-react';
+import { Search, MapPin, Loader2 } from 'lucide-react';
 
 interface CatalogPageProps {
     products: Product[];
@@ -15,16 +15,22 @@ interface CatalogPageProps {
     toggleWishlist: (product: Product) => void;
     setSelectedProduct: (product: Product | null) => void;
     setModalQuantity: (quantity: number) => void;
+    nearbyOnly: boolean;
+    setNearbyOnly: (v: boolean) => void;
+    hasLocation: boolean;
+    nearbyLoading: boolean;
+    onRequestLocation: () => void;
 }
 
 const CatalogPage: React.FC<CatalogPageProps> = ({
     products, filteredProducts, searchQuery, setSearchQuery,
     selectedCategory, setSelectedCategory, addToCart,
-    isFavorite, toggleWishlist, setSelectedProduct, setModalQuantity
+    isFavorite, toggleWishlist, setSelectedProduct, setModalQuantity,
+    nearbyOnly, setNearbyOnly, hasLocation, nearbyLoading, onRequestLocation
 }) => (
     <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="flex flex-col md:flex-row gap-12">
-            <div className="w-full md:w-64 space-y-12">
+            <div className="w-full md:w-64 space-y-6">
                 {/* Search */}
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100">
                     <div className="relative">
@@ -37,6 +43,41 @@ const CatalogPage: React.FC<CatalogPageProps> = ({
                             className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 focus:bg-white text-sm font-bold transition-all"
                         />
                     </div>
+                </div>
+
+                {/* Nearby Filter */}
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Location</h3>
+                    <button
+                        onClick={() => {
+                            if (!hasLocation) {
+                                onRequestLocation();
+                            } else {
+                                setNearbyOnly(!nearbyOnly);
+                            }
+                        }}
+                        className={`w-full flex items-center gap-3 py-3 px-4 rounded-xl text-sm font-extrabold transition-all ${nearbyOnly
+                                ? 'bg-green-600 text-white shadow-lg shadow-green-200'
+                                : 'text-slate-600 hover:bg-slate-50 border border-slate-100'
+                            }`}
+                    >
+                        {nearbyLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <MapPin className={`h-4 w-4 ${nearbyOnly ? 'text-white' : 'text-green-600'}`} />
+                        )}
+                        <span>{!hasLocation ? 'Enable Location' : nearbyOnly ? 'Nearby Active' : 'Show Nearby'}</span>
+                    </button>
+                    {nearbyOnly && (
+                        <p className="text-[10px] text-green-700 font-bold mt-2 ml-1">
+                            Showing products from stores near you
+                        </p>
+                    )}
+                    {!hasLocation && (
+                        <p className="text-[10px] text-slate-400 font-medium mt-2 ml-1">
+                            Enable location to find nearby stores
+                        </p>
+                    )}
                 </div>
 
                 {/* Categories */}
@@ -69,15 +110,26 @@ const CatalogPage: React.FC<CatalogPageProps> = ({
                 <div className="flex items-center justify-between mb-10">
                     <h2 className="text-3xl font-black text-slate-900">
                         {selectedCategory === 'all' ? 'All Products' : selectedCategory}
+                        {nearbyOnly && <span className="text-green-600 text-lg ml-2">📍 Nearby</span>}
                     </h2>
-                    <span className="text-slate-400 font-bold text-sm">{filteredProducts.length} items</span>
+                    <span className="text-slate-400 font-bold text-sm">
+                        {nearbyLoading ? 'Searching...' : `${filteredProducts.length} items`}
+                    </span>
                 </div>
 
-                {filteredProducts.length === 0 ? (
+                {nearbyLoading ? (
+                    <div className="text-center py-16 bg-white rounded-[2.5rem] border border-slate-100">
+                        <Loader2 className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-spin" />
+                        <p className="text-xl font-black text-slate-900 mb-2">Finding nearby products...</p>
+                        <p className="text-slate-500 font-medium">Searching stores near your location</p>
+                    </div>
+                ) : filteredProducts.length === 0 ? (
                     <div className="text-center py-16 bg-white rounded-[2.5rem] border border-slate-100">
                         <Search className="h-12 w-12 text-slate-300 mx-auto mb-4" />
                         <p className="text-xl font-black text-slate-900 mb-2">No products found</p>
-                        <p className="text-slate-500 font-medium">Try adjusting your search or filters</p>
+                        <p className="text-slate-500 font-medium">
+                            {nearbyOnly ? 'No nearby stores have matching products. Try disabling the nearby filter.' : 'Try adjusting your search or filters'}
+                        </p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

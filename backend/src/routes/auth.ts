@@ -10,19 +10,29 @@ import {
     deleteAddress,
     setDefaultAddress,
     updateLocation,
-    verifyFirebaseToken
+    verifyFirebaseToken,
+    emailSignup,
+    emailLogin,
+    seedTestUsers,
 } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
+import { authLimiter } from '../middleware/rateLimiter';
+import { loginValidation, signupValidation } from '../middleware/validate';
 
 const router = Router();
 
-// OTP routes (fallback/dev)
-router.post('/otp/request', requestOTP);
-router.post('/otp/verify', verifyOTPAndLogin);
-router.post('/otp/resend', resendOTPHandler);
+// Public auth routes (with rate limiting and validation)
+router.post('/otp/request', authLimiter, requestOTP);
+router.post('/otp/verify', authLimiter, verifyOTPAndLogin);
+router.post('/otp/resend', authLimiter, resendOTPHandler);
 
-// Firebase Phone Auth route
-router.post('/firebase-verify', verifyFirebaseToken);
+router.post('/firebase/verify', authLimiter, verifyFirebaseToken);
+
+router.post('/signup', authLimiter, signupValidation, emailSignup);
+router.post('/login', authLimiter, loginValidation, emailLogin);
+
+// Seed test users (dev only)
+router.post('/seed', seedTestUsers);
 
 // User routes
 router.get('/me', authenticate, getCurrentUser);
@@ -36,4 +46,3 @@ router.delete('/addresses/:addressId', authenticate, deleteAddress);
 router.put('/addresses/default', authenticate, setDefaultAddress);
 
 export default router;
-

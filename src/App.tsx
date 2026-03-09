@@ -12,6 +12,7 @@ import { Product, CartItem, User as UserType, Category, Address, Order } from '.
 import { GoogleGenAI } from "@google/genai";
 import api from './services/api';
 import { openRazorpayCheckout } from './services/razorpayService';
+import { useLocation } from './hooks/useLocation';
 import {
     HomePage,
     CatalogPage,
@@ -19,7 +20,8 @@ import {
     CheckoutPage,
     SuccessPage,
     LoginPage,
-    SellerDashboard
+    SellerDashboard,
+    AdminPanel
 } from './pages';
 
 const App: React.FC = () => {
@@ -33,6 +35,11 @@ const App: React.FC = () => {
     const [isProcessingPayment, setIsProcessingPayment] = useState(false);
     const [recipeIdea, setRecipeIdea] = useState<string>("");
     const [isRecipeLoading, setIsRecipeLoading] = useState(false);
+    const [nearbyOnly, setNearbyOnly] = useState(false);
+    const [nearbyProducts, setNearbyProducts] = useState<Product[]>([]);
+    const [nearbyLoading, setNearbyLoading] = useState(false);
+
+    const userLocation = useLocation();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<Category | 'all'>('all');
@@ -47,15 +54,65 @@ const App: React.FC = () => {
         { id: '2', label: 'Office', fullAddress: '456 Business Park, Floor 12', isDefault: false }
     ]);
 
+    // Fetch products based on search, category, and location filters
+    const fetchProducts = useCallback(async () => {
+        setNearbyLoading(true);
+        const params: any = {};
+        if (searchQuery) params.q = searchQuery;
+        if (selectedCategory !== 'all') params.category = selectedCategory;
+        if (nearbyOnly && userLocation.hasLocation && userLocation.latitude && userLocation.longitude) {
+            params.latitude = userLocation.latitude;
+            params.longitude = userLocation.longitude;
+        }
+
+        try {
+            const data = await api.searchProducts(params);
+            if (data.success && data.products) {
+                const mapped = data.products.map((p: any) => ({
+                    id: p._id || p.id,
+                    name: p.name,
+                    description: p.description,
+                    price: p.price,
+                    category: p.category,
+                    imageUrl: p.thumbnailUrl || p.imageUrls?.[0] || 'https://picsum.photos/seed/' + encodeURIComponent(p.name) + '/300/300',
+                    sellerId: p.storeId?._id || p.storeId || '',
+                    sellerName: p.storeId?.storeName || 'Local Store',
+                    unit: p.unit || '1 pc',
+                    stock: p.stock ?? 10,
+                    distance: p.distance,
+                }));
+                if (nearbyOnly) {
+                    setNearbyProducts(mapped);
+                } else {
+                    setProducts(mapped);
+                    setNearbyProducts([]);
+                }
+            }
+        } catch (error) {
+            console.error("Search error:", error);
+            if (nearbyOnly) setNearbyProducts([]);
+            else setProducts([]);
+        } finally {
+            setNearbyLoading(false);
+        }
+    }, [searchQuery, selectedCategory, nearbyOnly, userLocation.hasLocation, userLocation.latitude, userLocation.longitude]);
+
+    useEffect(() => {
+        fetchProducts();
+    }, [fetchProducts]);
+
     // Filter products based on search and category
     const filteredProducts = useMemo(() => {
+        if (nearbyOnly && nearbyProducts.length > 0) {
+            return nearbyProducts;
+        }
         return products.filter(product => {
             const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 product.category.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
             return matchesSearch && matchesCategory;
         });
-    }, [products, searchQuery, selectedCategory]);
+    }, [products, searchQuery, selectedCategory, nearbyOnly, nearbyProducts]);
 
     // Auto-login: check for existing token on mount
     useEffect(() => {
@@ -210,80 +267,107 @@ const App: React.FC = () => {
             return;
         }
         setIsRecipeLoading(true);
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const items = cart.map(i => i.name).join(', ');
         try {
-            const response = await ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: `I have these items in my grocery cart: ${items}. Suggest one quick and delicious meal I can make with these (or mostly these) in 2 sentences. Be creative!`,
-            });
-            setRecipeIdea(response.text || "Something delicious is coming your way!");
-        } catch (e) {
-            setRecipeIdea("Chef's secret: Mix your fresh items with pantry staples for a balanced delight!");
+            const res = await api.generateAIContent(items, 'recipe_idea');
+            if (res.success && res.text) {
+                setRecipeIdea(res.text);
+            } else {
+                setRecipeIdea("Sorry, I couldn't generate a recipe right now.");
+            }
+        } catch (error) {
+            console.error("Error generating recipe:", error);
+            setRecipeIdea("Failed to generate recipe. Please try again.");
+        } finally {
+            setIsRecipeLoading(false);
         }
-        setIsRecipeLoading(false);
     };
 
-    const handleOrder = async () => {
+    const handleOrder = async (deliveryDetails: { name: string, phone: string, address: string }) => {
         if (isProcessingPayment) return;
-
-        const orderAddress = addresses.find(a => a.isDefault)?.fullAddress || addresses[0]?.fullAddress || 'No address';
 
         if (paymentMethod === 'online') {
             setIsProcessingPayment(true);
             try {
                 const paymentResponse = await openRazorpayCheckout({
                     amount: totalAmount,
-                    customerName: user?.name || '',
+                    customerName: deliveryDetails.name,
                     customerEmail: user?.email || '',
-                    customerPhone: user?.phone || '',
+                    customerPhone: deliveryDetails.phone,
                     description: `LocalKart Order - ${cart.length} item${cart.length > 1 ? 's' : ''}`,
                 });
 
-                const newOrder: Order = {
-                    id: Math.random().toString(36).substr(2, 8).toUpperCase(),
-                    items: [...cart],
+                // Create Order payload for backend
+                const newOrderPayload = {
+                    items: cart.map(i => ({
+                        productId: i.id,
+                        name: i.name,
+                        price: i.price,
+                        quantity: i.quantity,
+                        sellerId: i.sellerId
+                    })),
                     total: totalAmount,
-                    date: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }),
-                    status: 'packed',
-                    address: orderAddress,
+                    address: deliveryDetails.address,
                     paymentMethod: 'online',
                     paymentStatus: 'paid',
                     paymentId: paymentResponse.razorpay_payment_id,
                 };
-                setOrders(prev => [newOrder, ...prev]);
-                setCart([]);
-                setOrderStatus(1);
-                setTimeout(() => setOrderStatus(2), 3000);
-                setTimeout(() => setOrderStatus(3), 6000);
-                setCurrentPage('success');
-                showToast('Payment successful! Order placed.', 'success');
+
+                const res = await api.createOrder(newOrderPayload);
+                if (res.success && res.order) {
+                    setOrders(prev => [res.order, ...prev]);
+                    setCart([]);
+                    setOrderStatus(1);
+                    setCurrentPage('order-success');
+                    showToast('Order placed successfully!', 'success');
+                } else {
+                    alert(res.message || 'Error processing order locally');
+                }
+
             } catch (error: any) {
                 if (error.message === 'Payment cancelled') {
                     showToast('Payment cancelled', 'info');
                 } else {
                     showToast(error.message || 'Payment failed', 'error');
                 }
+            } finally {
+                setIsProcessingPayment(false);
             }
-            setIsProcessingPayment(false);
         } else {
-            const newOrder: Order = {
-                id: Math.random().toString(36).substr(2, 8).toUpperCase(),
-                items: [...cart],
-                total: totalAmount,
-                date: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }),
-                status: 'packed',
-                address: orderAddress,
-                paymentMethod: 'cod',
-                paymentStatus: 'pending',
-            };
-            setOrders(prev => [newOrder, ...prev]);
-            setCart([]);
-            setOrderStatus(1);
-            setTimeout(() => setOrderStatus(2), 3000);
-            setTimeout(() => setOrderStatus(3), 6000);
-            setCurrentPage('success');
-            showToast('Order placed! Pay on delivery.', 'success');
+            // Cash on delivery
+            setIsProcessingPayment(true);
+            try {
+                // Create Order payload for backend
+                const newOrderPayload = {
+                    items: cart.map(i => ({
+                        productId: i.id,
+                        name: i.name,
+                        price: i.price,
+                        quantity: i.quantity,
+                        sellerId: i.sellerId
+                    })),
+                    total: totalAmount,
+                    address: deliveryDetails.address,
+                    paymentMethod: 'cod',
+                    paymentStatus: 'pending',
+                };
+
+                const res = await api.createOrder(newOrderPayload);
+                if (res.success && res.order) {
+                    setOrders(prev => [res.order, ...prev]);
+                    setCart([]);
+                    setOrderStatus(1);
+                    setCurrentPage('order-success');
+                    showToast('Order placed successfully via COD!', 'success');
+                } else {
+                    alert(res.message || 'Error processing COD order');
+                }
+            } catch (error) {
+                console.error("Order creation failed", error);
+                alert("Failed to create order.");
+            } finally {
+                setIsProcessingPayment(false);
+            }
         }
     };
 
@@ -297,6 +381,7 @@ const App: React.FC = () => {
                 onMenuClick={() => setIsMobileMenuOpen(true)}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
+                userLocation={userLocation}
             />
             <main className="flex-grow">
                 {currentPage === 'home' && (
@@ -328,6 +413,11 @@ const App: React.FC = () => {
                         toggleWishlist={toggleWishlist}
                         setSelectedProduct={setSelectedProduct}
                         setModalQuantity={setModalQuantity}
+                        nearbyOnly={nearbyOnly}
+                        setNearbyOnly={setNearbyOnly}
+                        hasLocation={userLocation.hasLocation}
+                        nearbyLoading={nearbyLoading}
+                        onRequestLocation={userLocation.refresh}
                     />
                 )}
                 {currentPage === 'cart' && (
@@ -365,6 +455,9 @@ const App: React.FC = () => {
                 {currentPage === 'seller-dashboard' && (
                     <SellerDashboard products={products} user={user} setProducts={setProducts} onNavigate={setCurrentPage} />
                 )}
+                {currentPage === 'admin' && (
+                    <AdminPanel user={user} onLogin={handleLogin} />
+                )}
                 {currentPage === 'orders' && <OrderHistory orders={orders} onReorder={handleReorder} onNavigate={setCurrentPage} />}
                 {currentPage === 'profile' && user && <Profile user={user} addresses={addresses} onAddAddress={handleAddAddress} onDeleteAddress={handleDeleteAddress} onSetDefaultAddress={handleSetDefaultAddress} onUpdateProfile={handleUpdateProfile} onNavigate={setCurrentPage} />}
                 {currentPage === 'wishlist' && <Wishlist items={wishlist} onRemoveFromWishlist={(id) => setWishlist(prev => prev.filter(p => p.id !== id))} onAddToCart={addToCart} onNavigate={setCurrentPage} />}
@@ -379,6 +472,7 @@ const App: React.FC = () => {
                 user={user}
                 onLogout={handleLogout}
                 cartCount={cart.reduce((s, i) => s + i.quantity, 0)}
+                userLocation={userLocation}
             />
 
             {/* Product Modal */}

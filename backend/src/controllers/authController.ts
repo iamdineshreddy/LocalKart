@@ -3,6 +3,7 @@ import { User } from '../models/User';
 import { sendOTP, verifyOTP, resendOTP } from '../services/otpService';
 import jwt from 'jsonwebtoken';
 import { verifyFirebaseIdToken } from '../config/firebaseAdmin';
+import { getJwtSecret, JWT_EXPIRES_IN } from '../config/jwt';
 
 // Request OTP for login/register
 export const requestOTP = async (req: Request, res: Response): Promise<void> => {
@@ -337,8 +338,8 @@ export const verifyFirebaseToken = async (req: Request, res: Response): Promise<
         // Generate app JWT token
         const token = jwt.sign(
             { id: user._id, phone: user.phone, role: user.role },
-            process.env.JWT_SECRET || 'your-secret-key',
-            { expiresIn: '30d' }
+            getJwtSecret(),
+            { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] }
         );
 
         res.status(200).json({
@@ -364,5 +365,144 @@ export const verifyFirebaseToken = async (req: Request, res: Response): Promise<
         } else {
             res.status(500).json({ success: false, message: 'Authentication failed' });
         }
+    }
+};
+
+// Email/Password Signup
+export const emailSignup = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { name, email, password, phone, role } = req.body;
+
+        if (!name || !email || !password) {
+            res.status(400).json({ success: false, message: 'Name, email, and password are required' });
+            return;
+        }
+
+        // Check if user already exists
+        const existing = await User.findOne({ email: email.toLowerCase() });
+        if (existing) {
+            res.status(400).json({ success: false, message: 'An account with this email already exists. Please login instead.' });
+            return;
+        }
+
+        const userRole = role && ['buyer', 'seller'].includes(role) ? role : 'buyer';
+        const user = new User({
+            name,
+            email: email.toLowerCase(),
+            phone: phone || `user_${Date.now()}`,
+            password,
+            role: userRole,
+            isVerified: true,
+            isActive: true,
+            kyc: { status: 'not_started' }
+        });
+        await user.save();
+
+        const token = jwt.sign(
+            { id: user._id, phone: user.phone, role: user.role },
+            process.env.JWT_SECRET || 'your-secret-key',
+            { expiresIn: '30d' }
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Account created successfully',
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                role: user.role,
+                isVerified: user.isVerified,
+            }
+        });
+    } catch (error) {
+        console.error('Email signup error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Email/Password Login
+export const emailLogin = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            res.status(400).json({ success: false, message: 'Email and password are required' });
+            return;
+        }
+
+        const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+        if (!user) {
+            res.status(401).json({ success: false, message: 'Invalid email or password' });
+            return;
+        }
+
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+            res.status(401).json({ success: false, message: 'Invalid email or password' });
+            return;
+        }
+
+        if (!user.isActive) {
+            res.status(401).json({ success: false, message: 'Account is deactivated' });
+            return;
+        }
+
+        const token = jwt.sign(
+            { id: user._id, phone: user.phone, role: user.role },
+            process.env.JWT_SECRET || 'your-secret-key',
+            { expiresIn: '30d' }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Login successful',
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                role: user.role,
+                isVerified: user.isVerified,
+            }
+        });
+    } catch (error) {
+        console.error('Email login error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Seed test users (called once)
+export const seedTestUsers = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const testUsers = [
+            { name: 'Test Buyer', email: 'buyer@test.com', phone: '9999900001', password: 'Test@123', role: 'buyer' },
+            { name: 'Test Seller', email: 'seller@test.com', phone: '9999900002', password: 'Test@123', role: 'seller' },
+        ];
+
+        const results = [];
+        for (const u of testUsers) {
+            const existing = await User.findOne({ email: u.email });
+            if (existing) {
+                results.push({ email: u.email, status: 'already exists' });
+            } else {
+                const newUser = new User({
+                    ...u,
+                    isVerified: true,
+                    isActive: true,
+                    kyc: { status: 'not_started' },
+                });
+                await newUser.save();
+                results.push({ email: u.email, status: 'created' });
+            }
+        }
+
+        res.status(200).json({ success: true, message: 'Test users seeded', results });
+    } catch (error) {
+        console.error('Seed test users error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 };

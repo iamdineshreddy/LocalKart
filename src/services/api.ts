@@ -84,6 +84,32 @@ class ApiService {
         return this.request('/auth/me');
     }
 
+    async emailSignup(data: { name: string; email: string; password: string; phone?: string; role?: string }) {
+        const result = await this.request('/auth/signup', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        if (result.token) {
+            this.setToken(result.token);
+        }
+        return result;
+    }
+
+    async emailLogin(email: string, password: string) {
+        const result = await this.request('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password }),
+        });
+        if (result.token) {
+            this.setToken(result.token);
+        }
+        return result;
+    }
+
+    async seedTestUsers() {
+        return this.request('/auth/seed-test-users', { method: 'POST' });
+    }
+
     async updateProfile(data: { name?: string; email?: string; profileImage?: string }) {
         return this.request('/auth/profile', {
             method: 'PUT',
@@ -166,14 +192,27 @@ class ApiService {
         });
     }
 
+    // Order endpoints
+    async createOrder(orderData: any) {
+        return this.request('/orders', {
+            method: 'POST',
+            body: JSON.stringify(orderData),
+        });
+    }
+
+    async getMyOrders() {
+        return this.request('/orders/me');
+    }
+
     // Store endpoints
-    async getNearestStores(latitude: number, longitude: number, radius: number = 10) {
-        return this.request(`/stores/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}`);
+    async getNearbyStores(latitude: number, longitude: number, limit: number = 10) {
+        return this.request(`/stores/nearby?latitude=${latitude}&longitude=${longitude}&limit=${limit}`);
     }
 
     async getStoreDetails(storeId: string) {
         return this.request(`/stores/${storeId}`);
     }
+
 
     async getNearbyProducts(latitude: number, longitude: number, category?: string) {
         let url = `/stores/products?latitude=${latitude}&longitude=${longitude}`;
@@ -261,6 +300,60 @@ class ApiService {
 
     async getMyProducts(page: number = 1, limit: number = 20) {
         return this.request(`/products/seller/my-products?page=${page}&limit=${limit}`);
+    }
+
+    // Admin endpoints
+    async adminLogin(email: string, password: string) {
+        const data = await this.request('/admin/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password }),
+        });
+        if (data.token) {
+            this.setToken(data.token);
+        }
+        return data;
+    }
+
+    async getDashboardStats() {
+        return this.request('/admin/dashboard');
+    }
+
+    async getAdminSellers(page: number = 1, limit: number = 20, status?: string) {
+        let url = `/admin/sellers?page=${page}&limit=${limit}`;
+        if (status && status !== 'all') url += `&status=${status}`;
+        return this.request(url);
+    }
+
+    async approveSeller(storeId: string) {
+        return this.request(`/admin/sellers/${storeId}/approve`, { method: 'PUT' });
+    }
+
+    async rejectSeller(storeId: string, reason?: string) {
+        return this.request(`/admin/sellers/${storeId}/reject`, {
+            method: 'PUT',
+            body: JSON.stringify({ reason }),
+        });
+    }
+
+    async getAdminProducts(page: number = 1, limit: number = 20, status?: string) {
+        let url = `/admin/products?page=${page}&limit=${limit}`;
+        if (status && status !== 'all') url += `&status=${status}`;
+        return this.request(url);
+    }
+
+    async toggleProduct(productId: string, isActive: boolean) {
+        return this.request(`/admin/products/${productId}/toggle`, {
+            method: 'PUT',
+            body: JSON.stringify({ isActive }),
+        });
+    }
+
+    // AI Content Proxy
+    async generateAIContent(prompt: string, type: 'product_description' | 'recipe_idea') {
+        return this.request('/assistant/generate', {
+            method: 'POST',
+            body: JSON.stringify({ prompt, type }),
+        });
     }
 
     // Logout

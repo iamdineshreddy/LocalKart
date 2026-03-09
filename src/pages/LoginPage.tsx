@@ -5,7 +5,7 @@ import { auth, RecaptchaVerifier, signInWithPhoneNumber, isFirebaseConfigured } 
 import type { ConfirmationResult } from '../services/firebaseConfig';
 import {
     Phone, Shield, User, ArrowRight, CheckCircle,
-    Sparkles, Loader2, Store
+    Sparkles, Loader2, Store, Mail, Lock, Eye, EyeOff, UserPlus, LogIn
 } from 'lucide-react';
 
 interface LoginPageProps {
@@ -13,6 +13,10 @@ interface LoginPageProps {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
+    // Auth mode: 'phone' for OTP flow, 'email' for email/password
+    const [authMode, setAuthMode] = useState<'phone' | 'email'>('email');
+
+    // Phone/OTP state
     const [authStep, setAuthStep] = useState<'phone' | 'otp' | 'name'>('phone');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
@@ -25,6 +29,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
     const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
     const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
     const recaptchaVerifierRef = useRef<any>(null);
+
+    // Email state
+    const [emailTab, setEmailTab] = useState<'login' | 'signup'>('login');
+    const [emailInput, setEmailInput] = useState('');
+    const [passwordInput, setPasswordInput] = useState('');
+    const [nameInput, setNameInput] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [emailIsSeller, setEmailIsSeller] = useState(false);
 
     // Countdown timer for resend
     useEffect(() => {
@@ -224,6 +236,80 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
         setIsLoading(false);
     };
 
+    // Email login handler
+    const handleEmailLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!emailInput || !passwordInput) {
+            setError('Email and password are required');
+            return;
+        }
+        setIsLoading(true);
+        setError('');
+        try {
+            // Route admin credentials to the admin login endpoint
+            const isAdminEmail = emailInput.toLowerCase() === 'admin@localkart.com';
+            const res = isAdminEmail
+                ? await api.adminLogin(emailInput, passwordInput)
+                : await api.emailLogin(emailInput, passwordInput);
+            if (res.success) {
+                handleLogin({
+                    id: res.user.id || res.user._id,
+                    name: res.user.name,
+                    email: res.user.email,
+                    role: res.user.role,
+                    phone: res.user.phone,
+                    isVerified: res.user.isVerified,
+                });
+            }
+        } catch (e: any) {
+            setError(e.message || 'Login failed');
+        }
+        setIsLoading(false);
+    };
+
+    // Email signup handler
+    const handleEmailSignup = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!nameInput || !emailInput || !passwordInput) {
+            setError('All fields are required');
+            return;
+        }
+        if (passwordInput.length < 6) {
+            setError('Password must be at least 6 characters');
+            return;
+        }
+        setIsLoading(true);
+        setError('');
+        try {
+            const res = await api.emailSignup({
+                name: nameInput,
+                email: emailInput,
+                password: passwordInput,
+                role: emailIsSeller ? 'seller' : 'buyer',
+            });
+            if (res.success) {
+                handleLogin({
+                    id: res.user.id || res.user._id,
+                    name: res.user.name,
+                    email: res.user.email,
+                    role: res.user.role,
+                    phone: res.user.phone,
+                    isVerified: res.user.isVerified,
+                });
+            }
+        } catch (e: any) {
+            setError(e.message || 'Signup failed');
+        }
+        setIsLoading(false);
+    };
+
+    // Prefill test credentials
+    const fillTestLogin = (email: string) => {
+        setEmailInput(email);
+        setPasswordInput('Test@123');
+        setError('');
+    };
+
     return (
         <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
             <div className="w-full max-w-md">
@@ -237,6 +323,24 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
                     </p>
                 </div>
 
+                {/* Auth Mode Toggle */}
+                <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl">
+                    <button
+                        onClick={() => { setAuthMode('email'); setError(''); }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-extrabold transition-all ${authMode === 'email' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        <Mail className="h-4 w-4" /> Email
+                    </button>
+                    <button
+                        onClick={() => { setAuthMode('phone'); setError(''); }}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-extrabold transition-all ${authMode === 'phone' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        <Phone className="h-4 w-4" /> Phone OTP
+                    </button>
+                </div>
+
                 {/* Card */}
                 <div className="bg-white p-8 sm:p-10 rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-blue-900/5 relative overflow-hidden">
                     {/* Decorative gradient */}
@@ -244,188 +348,376 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
                     <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-gradient-to-tr from-blue-50 to-transparent rounded-full opacity-40" />
 
                     <div className="relative z-10">
-                        {/* Step indicators */}
-                        <div className="flex items-center justify-center gap-2 mb-8">
-                            {['phone', 'otp', 'name'].map((step, i) => (
-                                <div key={step} className="flex items-center gap-2">
-                                    <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${authStep === step ? 'bg-blue-600 scale-125 shadow-lg shadow-blue-500/30' :
-                                        ['phone', 'otp', 'name'].indexOf(authStep) > i ? 'bg-blue-400' : 'bg-slate-200'
-                                        }`} />
-                                    {i < 2 && <div className={`w-8 h-0.5 transition-all duration-500 ${['phone', 'otp', 'name'].indexOf(authStep) > i ? 'bg-blue-400' : 'bg-slate-200'
-                                        }`} />}
-                                </div>
-                            ))}
-                        </div>
 
-                        {/* STEP 1: Phone Number */}
-                        {authStep === 'phone' && (
-                            <div className="space-y-6">
-                                <div className="text-center">
-                                    <div className="bg-blue-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                        <Phone className="h-7 w-7 text-blue-600" />
-                                    </div>
-                                    <h2 className="text-2xl font-black text-slate-900 mb-1">Welcome</h2>
-                                    <p className="text-slate-500 text-sm font-medium">Enter your phone number to get started</p>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="relative">
-                                        <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">+91</span>
-                                        <input
-                                            type="tel"
-                                            value={phoneNumber}
-                                            onChange={(e) => {
-                                                const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                                                setPhoneNumber(val);
-                                                setError('');
-                                            }}
-                                            placeholder="Enter phone number"
-                                            className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-extrabold text-lg transition-all placeholder:font-bold placeholder:text-slate-300"
-                                            maxLength={10}
-                                            autoFocus
-                                        />
-                                    </div>
-
-                                    {/* Seller Toggle */}
+                        {/* ===== EMAIL AUTH MODE ===== */}
+                        {authMode === 'email' && (
+                            <>
+                                {/* Login / Signup tab */}
+                                <div className="flex gap-1 mb-6 bg-slate-50 p-1 rounded-xl">
                                     <button
-                                        type="button"
-                                        onClick={() => setIsSeller(!isSeller)}
-                                        className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl border-2 transition-all duration-300 ${isSeller
-                                            ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-500/10'
-                                            : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+                                        onClick={() => { setEmailTab('login'); setError(''); }}
+                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${emailTab === 'login' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-700'
                                             }`}
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <Store className={`h-5 w-5 transition-colors ${isSeller ? 'text-blue-600' : 'text-slate-400'}`} />
-                                            <span className={`font-bold text-sm ${isSeller ? 'text-blue-900' : 'text-slate-500'}`}>
-                                                I want to sell on LocalKart
-                                            </span>
-                                        </div>
-                                        <div className={`w-11 h-6 rounded-full p-0.5 transition-all duration-300 ${isSeller ? 'bg-blue-600' : 'bg-slate-200'
-                                            }`}>
-                                            <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${isSeller ? 'translate-x-5' : 'translate-x-0'
-                                                }`} />
-                                        </div>
+                                        <LogIn className="h-3.5 w-3.5" /> Login
                                     </button>
-                                    {isSeller && (
-                                        <p className="text-xs text-blue-600 font-bold text-center px-4 -mt-1">
-                                            🏪 You'll be registered as a seller and can set up your store after login
-                                        </p>
-                                    )}
+                                    <button
+                                        onClick={() => { setEmailTab('signup'); setError(''); }}
+                                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${emailTab === 'signup' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-700'
+                                            }`}
+                                    >
+                                        <UserPlus className="h-3.5 w-3.5" /> Sign Up
+                                    </button>
                                 </div>
 
-                                <button
-                                    onClick={handleSendOTP}
-                                    disabled={isLoading || phoneNumber.length < 10}
-                                    className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>
-                                        Send OTP <ArrowRight className="h-5 w-5" />
-                                    </>}
-                                </button>
-                            </div>
+                                {emailTab === 'login' ? (
+                                    <form onSubmit={handleEmailLogin} className="space-y-5">
+                                        <div className="text-center mb-4">
+                                            <div className="bg-blue-50 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                                <LogIn className="h-6 w-6 text-blue-600" />
+                                            </div>
+                                            <h2 className="text-2xl font-black text-slate-900">Welcome Back</h2>
+                                            <p className="text-slate-500 text-sm font-medium mt-1">Login with your email</p>
+                                        </div>
+
+                                        <div>
+                                            <div className="relative">
+                                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type="email"
+                                                    value={emailInput}
+                                                    onChange={(e) => { setEmailInput(e.target.value); setError(''); }}
+                                                    placeholder="Email address"
+                                                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-bold text-sm transition-all"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="relative">
+                                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type={showPassword ? 'text' : 'password'}
+                                                    value={passwordInput}
+                                                    onChange={(e) => { setPasswordInput(e.target.value); setError(''); }}
+                                                    placeholder="Password"
+                                                    className="w-full pl-11 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-bold text-sm transition-all"
+                                                />
+                                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            disabled={isLoading}
+                                            className="w-full bg-blue-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Login <ArrowRight className="h-5 w-5" /></>}
+                                        </button>
+
+                                        {/* Test credentials */}
+                                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Quick Test Login</p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fillTestLogin('buyer@test.com')}
+                                                    className="flex-1 bg-blue-50 text-blue-700 py-2.5 rounded-xl text-xs font-black hover:bg-blue-100 transition-all"
+                                                >
+                                                    🛒 Buyer
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fillTestLogin('seller@test.com')}
+                                                    className="flex-1 bg-purple-50 text-purple-700 py-2.5 rounded-xl text-xs font-black hover:bg-purple-100 transition-all"
+                                                >
+                                                    🏪 Seller
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setEmailInput('admin@localkart.com'); setPasswordInput('Admin@123'); setError(''); }}
+                                                    className="flex-1 bg-amber-50 text-amber-700 py-2.5 rounded-xl text-xs font-black hover:bg-amber-100 transition-all"
+                                                >
+                                                    🛡️ Admin
+                                                </button>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 font-medium mt-2 text-center">
+                                                Passwords: <span className="font-bold text-slate-600">Test@123</span> (Users) | <span className="font-bold text-slate-600">Admin@123</span> (Admin)
+                                            </p>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <form onSubmit={handleEmailSignup} className="space-y-5">
+                                        <div className="text-center mb-4">
+                                            <div className="bg-green-50 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                                <UserPlus className="h-6 w-6 text-green-600" />
+                                            </div>
+                                            <h2 className="text-2xl font-black text-slate-900">Create Account</h2>
+                                            <p className="text-slate-500 text-sm font-medium mt-1">Sign up with your email</p>
+                                        </div>
+
+                                        <div>
+                                            <div className="relative">
+                                                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    value={nameInput}
+                                                    onChange={(e) => { setNameInput(e.target.value); setError(''); }}
+                                                    placeholder="Full name"
+                                                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-bold text-sm transition-all"
+                                                    autoFocus
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="relative">
+                                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type="email"
+                                                    value={emailInput}
+                                                    onChange={(e) => { setEmailInput(e.target.value); setError(''); }}
+                                                    placeholder="Email address"
+                                                    className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-bold text-sm transition-all"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="relative">
+                                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                <input
+                                                    type={showPassword ? 'text' : 'password'}
+                                                    value={passwordInput}
+                                                    onChange={(e) => { setPasswordInput(e.target.value); setError(''); }}
+                                                    placeholder="Password (min 6 chars)"
+                                                    className="w-full pl-11 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-bold text-sm transition-all"
+                                                />
+                                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Seller Toggle */}
+                                        <button
+                                            type="button"
+                                            onClick={() => setEmailIsSeller(!emailIsSeller)}
+                                            className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl border-2 transition-all duration-300 ${emailIsSeller
+                                                ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-500/10'
+                                                : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Store className={`h-5 w-5 transition-colors ${emailIsSeller ? 'text-blue-600' : 'text-slate-400'}`} />
+                                                <span className={`font-bold text-sm ${emailIsSeller ? 'text-blue-900' : 'text-slate-500'}`}>
+                                                    Register as Seller
+                                                </span>
+                                            </div>
+                                            <div className={`w-11 h-6 rounded-full p-0.5 transition-all duration-300 ${emailIsSeller ? 'bg-blue-600' : 'bg-slate-200'}`}>
+                                                <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${emailIsSeller ? 'translate-x-5' : 'translate-x-0'}`} />
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            type="submit"
+                                            disabled={isLoading}
+                                            className="w-full bg-blue-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Create Account <Sparkles className="h-5 w-5" /></>}
+                                        </button>
+                                    </form>
+                                )}
+                            </>
                         )}
 
-                        {/* STEP 2: OTP Verification */}
-                        {authStep === 'otp' && (
-                            <div className="space-y-6">
-                                <div className="text-center">
-                                    <div className="bg-green-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                        <Shield className="h-7 w-7 text-green-600" />
-                                    </div>
-                                    <h2 className="text-2xl font-black text-slate-900 mb-1">Verify OTP</h2>
-                                    <p className="text-slate-500 text-sm font-medium">
-                                        Code sent to <span className="text-slate-900 font-bold">+91 {phoneNumber}</span>
-                                    </p>
-                                    <button
-                                        onClick={() => { setAuthStep('phone'); setOtpDigits(['', '', '', '', '', '']); setError(''); }}
-                                        className="text-blue-600 text-xs font-bold mt-1 hover:underline"
-                                    >
-                                        Change number
-                                    </button>
-                                </div>
-
-                                {/* OTP Input Boxes */}
-                                <div className="flex justify-center gap-2 sm:gap-3" onPaste={handleOtpPaste}>
-                                    {otpDigits.map((digit, i) => (
-                                        <input
-                                            key={i}
-                                            ref={(el) => { otpRefs.current[i] = el; }}
-                                            type="text"
-                                            inputMode="numeric"
-                                            maxLength={1}
-                                            value={digit}
-                                            onChange={(e) => handleOtpChange(i, e.target.value)}
-                                            onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                                            className={`w-12 h-14 sm:w-14 sm:h-16 text-center text-xl font-black rounded-xl border-2 outline-none transition-all duration-200 ${digit
-                                                ? 'border-blue-500 bg-blue-50/50 text-blue-900 shadow-lg shadow-blue-500/10'
-                                                : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-blue-500 focus:bg-white focus:shadow-lg focus:shadow-blue-500/10'
-                                                }`}
-                                            autoFocus={i === 0}
-                                        />
+                        {/* ===== PHONE OTP MODE ===== */}
+                        {authMode === 'phone' && (
+                            <>
+                                {/* Step indicators */}
+                                <div className="flex items-center justify-center gap-2 mb-8">
+                                    {['phone', 'otp', 'name'].map((step, i) => (
+                                        <div key={step} className="flex items-center gap-2">
+                                            <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${authStep === step ? 'bg-blue-600 scale-125 shadow-lg shadow-blue-500/30' :
+                                                ['phone', 'otp', 'name'].indexOf(authStep) > i ? 'bg-blue-400' : 'bg-slate-200'
+                                                }`} />
+                                            {i < 2 && <div className={`w-8 h-0.5 transition-all duration-500 ${['phone', 'otp', 'name'].indexOf(authStep) > i ? 'bg-blue-400' : 'bg-slate-200'
+                                                }`} />}
+                                        </div>
                                     ))}
                                 </div>
 
-                                <button
-                                    onClick={handleVerifyOTP}
-                                    disabled={isLoading || otpDigits.join('').length !== 6}
-                                    className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>
-                                        Verify & Continue <CheckCircle className="h-5 w-5" />
-                                    </>}
-                                </button>
+                                {/* STEP 1: Phone Number */}
+                                {authStep === 'phone' && (
+                                    <div className="space-y-6">
+                                        <div className="text-center">
+                                            <div className="bg-blue-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                                <Phone className="h-7 w-7 text-blue-600" />
+                                            </div>
+                                            <h2 className="text-2xl font-black text-slate-900 mb-1">Phone Login</h2>
+                                            <p className="text-slate-500 text-sm font-medium">Enter your phone number to get started</p>
+                                        </div>
 
-                                {/* Resend */}
-                                <div className="text-center">
-                                    {countdown > 0 ? (
-                                        <p className="text-slate-400 text-sm font-bold">
-                                            Resend OTP in <span className="text-blue-600 font-black">{countdown}s</span>
-                                        </p>
-                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="relative">
+                                                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">+91</span>
+                                                <input
+                                                    type="tel"
+                                                    value={phoneNumber}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                                        setPhoneNumber(val);
+                                                        setError('');
+                                                    }}
+                                                    placeholder="Enter phone number"
+                                                    className="w-full pl-14 pr-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-extrabold text-lg transition-all placeholder:font-bold placeholder:text-slate-300"
+                                                    maxLength={10}
+                                                    autoFocus
+                                                />
+                                            </div>
+
+                                            {/* Seller Toggle */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsSeller(!isSeller)}
+                                                className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl border-2 transition-all duration-300 ${isSeller
+                                                    ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-500/10'
+                                                    : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <Store className={`h-5 w-5 transition-colors ${isSeller ? 'text-blue-600' : 'text-slate-400'}`} />
+                                                    <span className={`font-bold text-sm ${isSeller ? 'text-blue-900' : 'text-slate-500'}`}>
+                                                        I want to sell on LocalKart
+                                                    </span>
+                                                </div>
+                                                <div className={`w-11 h-6 rounded-full p-0.5 transition-all duration-300 ${isSeller ? 'bg-blue-600' : 'bg-slate-200'
+                                                    }`}>
+                                                    <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${isSeller ? 'translate-x-5' : 'translate-x-0'
+                                                        }`} />
+                                                </div>
+                                            </button>
+                                            {isSeller && (
+                                                <p className="text-xs text-blue-600 font-bold text-center px-4 -mt-1">
+                                                    🏪 You'll be registered as a seller and can set up your store after login
+                                                </p>
+                                            )}
+                                        </div>
+
                                         <button
-                                            onClick={handleResendOTP}
-                                            disabled={isLoading}
-                                            className="text-blue-600 text-sm font-bold hover:underline disabled:opacity-50"
+                                            onClick={handleSendOTP}
+                                            disabled={isLoading || phoneNumber.length < 10}
+                                            className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                         >
-                                            Resend OTP
+                                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>
+                                                Send OTP <ArrowRight className="h-5 w-5" />
+                                            </>}
                                         </button>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* STEP 3: Name Entry (new users) */}
-                        {authStep === 'name' && (
-                            <div className="space-y-6">
-                                <div className="text-center">
-                                    <div className="bg-purple-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                        <User className="h-7 w-7 text-purple-600" />
                                     </div>
-                                    <h2 className="text-2xl font-black text-slate-900 mb-1">Almost there!</h2>
-                                    <p className="text-slate-500 text-sm font-medium">What should we call you?</p>
-                                </div>
+                                )}
 
-                                <input
-                                    type="text"
-                                    value={userName}
-                                    onChange={(e) => { setUserName(e.target.value); setError(''); }}
-                                    placeholder="Enter your full name"
-                                    className="w-full px-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-extrabold text-lg transition-all placeholder:font-bold placeholder:text-slate-300"
-                                    autoFocus
-                                    onKeyDown={(e) => e.key === 'Enter' && handleCompleteName()}
-                                />
+                                {/* STEP 2: OTP Verification */}
+                                {authStep === 'otp' && (
+                                    <div className="space-y-6">
+                                        <div className="text-center">
+                                            <div className="bg-green-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                                <Shield className="h-7 w-7 text-green-600" />
+                                            </div>
+                                            <h2 className="text-2xl font-black text-slate-900 mb-1">Verify OTP</h2>
+                                            <p className="text-slate-500 text-sm font-medium">
+                                                Code sent to <span className="text-slate-900 font-bold">+91 {phoneNumber}</span>
+                                            </p>
+                                            <button
+                                                onClick={() => { setAuthStep('phone'); setOtpDigits(['', '', '', '', '', '']); setError(''); }}
+                                                className="text-blue-600 text-xs font-bold mt-1 hover:underline"
+                                            >
+                                                Change number
+                                            </button>
+                                        </div>
 
-                                <button
-                                    onClick={handleCompleteName}
-                                    disabled={isLoading || !userName.trim()}
-                                    className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>
-                                        Start Shopping <Sparkles className="h-5 w-5" />
-                                    </>}
-                                </button>
-                            </div>
+                                        {/* OTP Input Boxes */}
+                                        <div className="flex justify-center gap-2 sm:gap-3" onPaste={handleOtpPaste}>
+                                            {otpDigits.map((digit, i) => (
+                                                <input
+                                                    key={i}
+                                                    ref={(el) => { otpRefs.current[i] = el; }}
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    maxLength={1}
+                                                    value={digit}
+                                                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                                                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                                                    className={`w-12 h-14 sm:w-14 sm:h-16 text-center text-xl font-black rounded-xl border-2 outline-none transition-all duration-200 ${digit
+                                                        ? 'border-blue-500 bg-blue-50/50 text-blue-900 shadow-lg shadow-blue-500/10'
+                                                        : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-blue-500 focus:bg-white focus:shadow-lg focus:shadow-blue-500/10'
+                                                        }`}
+                                                    autoFocus={i === 0}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        <button
+                                            onClick={handleVerifyOTP}
+                                            disabled={isLoading || otpDigits.join('').length !== 6}
+                                            className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>
+                                                Verify & Continue <CheckCircle className="h-5 w-5" />
+                                            </>}
+                                        </button>
+
+                                        {/* Resend */}
+                                        <div className="text-center">
+                                            {countdown > 0 ? (
+                                                <p className="text-slate-400 text-sm font-bold">
+                                                    Resend OTP in <span className="text-blue-600 font-black">{countdown}s</span>
+                                                </p>
+                                            ) : (
+                                                <button
+                                                    onClick={handleResendOTP}
+                                                    disabled={isLoading}
+                                                    className="text-blue-600 text-sm font-bold hover:underline disabled:opacity-50"
+                                                >
+                                                    Resend OTP
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* STEP 3: Name Entry (new users) */}
+                                {authStep === 'name' && (
+                                    <div className="space-y-6">
+                                        <div className="text-center">
+                                            <div className="bg-purple-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                                <User className="h-7 w-7 text-purple-600" />
+                                            </div>
+                                            <h2 className="text-2xl font-black text-slate-900 mb-1">Almost there!</h2>
+                                            <p className="text-slate-500 text-sm font-medium">What should we call you?</p>
+                                        </div>
+
+                                        <input
+                                            type="text"
+                                            value={userName}
+                                            onChange={(e) => { setUserName(e.target.value); setError(''); }}
+                                            placeholder="Enter your full name"
+                                            className="w-full px-5 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-600/10 focus:border-blue-500 outline-none font-extrabold text-lg transition-all placeholder:font-bold placeholder:text-slate-300"
+                                            autoFocus
+                                            onKeyDown={(e) => e.key === 'Enter' && handleCompleteName()}
+                                        />
+
+                                        <button
+                                            onClick={handleCompleteName}
+                                            disabled={isLoading || !userName.trim()}
+                                            className="w-full bg-blue-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-950 transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>
+                                                Start Shopping <Sparkles className="h-5 w-5" />
+                                            </>}
+                                        </button>
+                                    </div>
+                                )}
+                            </>
                         )}
 
                         {/* Error message */}

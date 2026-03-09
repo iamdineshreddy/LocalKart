@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import connectDB from './config/database';
 import routes from './routes';
+import { initCronJobs } from './utils/cronJobs';
 
 // Load environment variables
 dotenv.config();
@@ -21,11 +22,31 @@ app.use(cors({
     credentials: true
 }));
 app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' })); // larger limit for base64 image uploads
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use('/uploads', express.static('uploads')); // serve uploaded files
 
-// Connect to database
-connectDB();
+// Connect to database and seed test users
+connectDB().then(async () => {
+    try {
+        const { User } = await import('./models/User');
+        const testUsers = [
+            { name: 'Test Buyer', email: 'buyer@test.com', phone: '9999900001', password: 'Test@123', role: 'buyer' },
+            { name: 'Test Seller', email: 'seller@test.com', phone: '9999900002', password: 'Test@123', role: 'seller' },
+        ];
+        for (const u of testUsers) {
+            const exists = await User.findOne({ email: u.email });
+            if (!exists) {
+                await new User({ ...u, isVerified: true, isActive: true, kyc: { status: 'not_started' } }).save();
+                console.log(`Seeded test user: ${u.email}`);
+            }
+        }
+    } catch (e) {
+        console.log('Test user seeding skipped (probably already exist)');
+    }
+    // Initialize scheduled cron jobs (trust scores, fraud scanning)
+    initCronJobs();
+});
 
 // API Routes
 app.use('/api', routes);
@@ -41,6 +62,11 @@ app.get('/', (req, res) => {
             kyc: '/api/kyc',
             stores: '/api/stores',
             products: '/api/products',
+            admin: '/api/admin',
+            reviews: '/api/reviews',
+            reports: '/api/reports',
+            assistant: '/api/assistant',
+            recommendations: '/api/recommendations',
             health: '/api/health'
         }
     });

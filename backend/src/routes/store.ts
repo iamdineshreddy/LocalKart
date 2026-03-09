@@ -9,6 +9,7 @@ import {
     getAllStores
 } from '../controllers/storeController';
 import { authenticate, isSeller, isAdmin } from '../middleware/auth';
+import { storeValidation } from '../middleware/validate';
 
 const router = Router();
 
@@ -18,8 +19,8 @@ router.get('/products', getNearbyProducts);
 router.get('/:storeId', getStoreDetails);
 
 // Seller routes
-router.post('/', authenticate, isSeller, createStore);
-router.put('/', authenticate, isSeller, updateStore);
+router.post('/', authenticate, isSeller, storeValidation, createStore);
+router.put('/', authenticate, isSeller, storeValidation, updateStore);
 router.get('/me/my-store', authenticate, isSeller, getMyStore);
 
 // Admin routes

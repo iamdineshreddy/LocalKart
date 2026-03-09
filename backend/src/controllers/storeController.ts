@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Store } from '../models/Store';
 import { Product } from '../models/Product';
+import { User } from '../models/User';
 import { findNearestStores, getProductsFromNearestStores } from '../services/locationService';
 
 // Get nearest stores
@@ -90,12 +91,21 @@ export const createStore = async (req: Request, res: Response): Promise<void> =>
 export const updateStore = async (req: Request, res: Response): Promise<void> => {
     try {
         const userId = (req as any).user?.id;
-        const updates = req.body;
+
+        // Whitelist allowed fields to prevent mass assignment vulnerability
+        const allowedFields = ['name', 'description', 'address', 'location', 'phone', 'email', 'openingTime', 'closingTime', 'isOpen'];
+        const updates: any = {};
+
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                updates[field] = req.body[field];
+            }
+        }
 
         const store = await Store.findOneAndUpdate(
             { ownerId: userId },
-            updates,
-            { new: true }
+            { $set: updates },
+            { new: true, runValidators: true }
         );
 
         if (!store) {
@@ -191,5 +201,3 @@ export const getAllStores = async (req: Request, res: Response): Promise<void> =
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
-
-import { User } from '../models/User';

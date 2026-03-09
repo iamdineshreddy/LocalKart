@@ -19,15 +19,10 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
             limit = 20
         } = req.query;
 
-        if (!latitude || !longitude) {
-            res.status(400).json({ success: false, message: 'Location required for search' });
-            return;
-        }
-
         const result = await mlProductSearch(
             q as string || '',
-            parseFloat(latitude as string),
-            parseFloat(longitude as string),
+            latitude ? parseFloat(latitude as string) : undefined,
+            longitude ? parseFloat(longitude as string) : undefined,
             {
                 category: category as string,
                 minPrice: minPrice ? parseFloat(minPrice as string) : undefined,

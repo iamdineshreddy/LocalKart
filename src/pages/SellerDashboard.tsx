@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, Category, User } from '../types';
 import { Store } from 'lucide-react';
+import { api } from '../services/api';
 
 interface SellerDashboardProps {
     products: Product[];
@@ -11,24 +12,36 @@ interface SellerDashboardProps {
 
 const SellerDashboard: React.FC<SellerDashboardProps> = ({ products, user, setProducts, onNavigate }) => {
     const [newItem, setNewItem] = useState({ name: '', price: '', category: Category.FRUITS_VEGGIES, keywords: '', description: '' });
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleAddItem = (e: React.FormEvent) => {
+    const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
-        const product: Product = {
-            id: Math.random().toString(36).substr(2, 9),
-            name: newItem.name,
-            description: newItem.description,
-            price: parseFloat(newItem.price),
-            category: newItem.category,
-            imageUrl: `https://picsum.photos/seed/${newItem.name}/800/600`,
-            sellerId: user?.id || 's1',
-            sellerName: user?.name || 'Local Seller',
-            unit: 'ea',
-            stock: 100
-        };
-        setProducts([product, ...products]);
-        alert('Listed successfully on LocalKart!');
-        onNavigate('catalog');
+        setIsSubmitting(true);
+        try {
+            const productData = {
+                name: newItem.name,
+                description: newItem.description,
+                price: parseFloat(newItem.price),
+                category: newItem.category,
+                imageUrl: `https://picsum.photos/seed/${newItem.name.replace(/\s+/g, '')}/800/600`, // Better fallback image
+                unit: 'ea',
+                stock: 100
+            };
+
+            const res = await api.createProduct(productData);
+            if (res.success && res.product) {
+                setProducts([res.product, ...products]);
+                alert('Listed successfully on LocalKart!');
+                onNavigate('catalog');
+            } else {
+                alert(res.message || 'Failed to list item');
+            }
+        } catch (error) {
+            console.error("Error creating product:", error);
+            alert("An error occurred while creating the product.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (!user || user.role !== 'seller') {
@@ -54,7 +67,9 @@ const SellerDashboard: React.FC<SellerDashboardProps> = ({ products, user, setPr
                         <input required type="number" step="0.01" value={newItem.price} onChange={e => setNewItem({ ...newItem, price: e.target.value })} placeholder="Price" className="w-full p-4.5 bg-slate-50 border border-slate-100 rounded-[1.2rem] outline-none font-bold" />
                     </div>
                     <textarea required rows={4} value={newItem.description} onChange={e => setNewItem({ ...newItem, description: e.target.value })} placeholder="Description" className="w-full p-4.5 bg-slate-50 border border-slate-100 rounded-[1.2rem] outline-none resize-none font-bold"></textarea>
-                    <button type="submit" className="w-full bg-blue-900 text-white py-6 rounded-[2rem] font-black text-xl hover:bg-black transition-all shadow-2xl active:scale-95">List Item</button>
+                    <button type="submit" disabled={isSubmitting} className="w-full bg-blue-900 text-white py-6 rounded-[2rem] font-black text-xl hover:bg-black transition-all shadow-2xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isSubmitting ? 'Listing Item...' : 'List Item'}
+                    </button>
                 </form>
             </div>
         </div>
