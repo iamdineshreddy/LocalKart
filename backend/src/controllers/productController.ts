@@ -200,6 +200,9 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
         const product = new Product({
             ...productData,
             storeId: store._id,
+            sellerId: userId,
+            approvalStatus: 'pending',
+            isActive: false, // inactive until admin approves
             priceHistory: [{ price: productData.price, date: new Date() }]
         });
 
@@ -207,7 +210,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 
         res.status(201).json({
             success: true,
-            message: 'Product created successfully',
+            message: 'Product created successfully. It will be visible after admin approval.',
             product
         });
     } catch (error) {

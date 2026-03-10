@@ -9,6 +9,7 @@ import reportRoutes from './report';
 import assistantRoutes from './assistant';
 import recommendationRoutes from './recommendation';
 import orderRoutes from './order';
+import sellerRoutes from './seller';
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.use('/kyc', kycRoutes);
 router.use('/stores', storeRoutes);
 router.use('/products', productRoutes);
 router.use('/admin', adminRoutes);
+router.use('/seller', sellerRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/reports', reportRoutes);
 router.use('/assistant', assistantRoutes);

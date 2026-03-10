@@ -301,13 +301,13 @@ const App: React.FC = () => {
                 const newOrderPayload = {
                     items: cart.map(i => ({
                         productId: i.id,
-                        name: i.name,
-                        price: i.price,
                         quantity: i.quantity,
-                        sellerId: i.sellerId
                     })),
-                    total: totalAmount,
-                    address: deliveryDetails.address,
+                    deliveryAddress: {
+                        fullAddress: deliveryDetails.address,
+                        contactName: deliveryDetails.name,
+                        contactPhone: deliveryDetails.phone,
+                    },
                     paymentMethod: 'online',
                     paymentStatus: 'paid',
                     paymentId: paymentResponse.razorpay_payment_id,
@@ -341,13 +341,13 @@ const App: React.FC = () => {
                 const newOrderPayload = {
                     items: cart.map(i => ({
                         productId: i.id,
-                        name: i.name,
-                        price: i.price,
                         quantity: i.quantity,
-                        sellerId: i.sellerId
                     })),
-                    total: totalAmount,
-                    address: deliveryDetails.address,
+                    deliveryAddress: {
+                        fullAddress: deliveryDetails.address,
+                        contactName: deliveryDetails.name,
+                        contactPhone: deliveryDetails.phone,
+                    },
                     paymentMethod: 'cod',
                     paymentStatus: 'pending',
                 };

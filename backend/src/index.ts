@@ -30,15 +30,35 @@ app.use('/uploads', express.static('uploads')); // serve uploaded files
 connectDB().then(async () => {
     try {
         const { User } = await import('./models/User');
+        const { Store } = await import('./models/Store');
         const testUsers = [
-            { name: 'Test Buyer', email: 'buyer@test.com', phone: '9999900001', password: 'Test@123', role: 'buyer' },
-            { name: 'Test Seller', email: 'seller@test.com', phone: '9999900002', password: 'Test@123', role: 'seller' },
+            { name: 'Test Buyer', email: 'buyer@test.com', phone: '9999900001', password: '123456', role: 'buyer' },
+            { name: 'Test Seller', email: 'seller@test.com', phone: '9999900002', password: '123456', role: 'seller' },
+            { name: 'Admin User', email: 'admin@test.com', phone: '9999900003', password: 'admin123', role: 'admin' },
         ];
         for (const u of testUsers) {
             const exists = await User.findOne({ email: u.email });
             if (!exists) {
-                await new User({ ...u, isVerified: true, isActive: true, kyc: { status: 'not_started' } }).save();
+                await new User({ ...u, isVerified: true, isActive: true, kyc: { status: 'verified' } }).save();
                 console.log(`Seeded test user: ${u.email}`);
+            }
+        }
+        // Create store for test seller
+        const seller = await User.findOne({ email: 'seller@test.com' });
+        if (seller) {
+            const storeExists = await Store.findOne({ ownerId: seller._id });
+            if (!storeExists) {
+                await new Store({
+                    ownerId: seller._id, storeName: 'LocalKart General Store',
+                    description: 'Your neighborhood one-stop shop',
+                    phone: '9999900002', address: '123 Main Street, Hyderabad',
+                    city: 'Hyderabad', state: 'Telangana', pincode: '500001',
+                    location: { type: 'Point', coordinates: [78.4867, 17.3850] },
+                    isVerified: true, isActive: true, isOpen: true,
+                    categories: ['Groceries', 'Fruits & Vegetables', 'Snacks', 'Dairy Products', 'Household Items', 'Beverages', 'Bakery', 'Instant Food'],
+                    kycStatus: 'verified'
+                }).save();
+                console.log('Seeded test store: LocalKart General Store');
             }
         }
     } catch (e) {

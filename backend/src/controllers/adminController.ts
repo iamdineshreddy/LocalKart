@@ -9,7 +9,7 @@ import { TrustScore } from '../models/TrustScore';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../config/jwt';
 
-// Admin login with .env credentials
+// Admin login with .env credentials OR DB-based admin user
 export const adminLogin = async (req: Request, res: Response): Promise<void> => {
     try {
         const { email, password } = req.body;
@@ -17,6 +17,19 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
             res.status(400).json({ success: false, message: 'Email and password are required' });
             return;
         }
+
+        // Try DB-based admin login first
+        const dbAdmin = await User.findOne({ email: email.toLowerCase(), role: 'admin' }).select('+password');
+        if (dbAdmin) {
+            const isMatch = await dbAdmin.comparePassword(password);
+            if (isMatch) {
+                const token = jwt.sign({ id: dbAdmin._id, phone: dbAdmin.phone, role: 'admin' }, getJwtSecret(), { expiresIn: '7d' });
+                res.status(200).json({ success: true, message: 'Admin login successful', token, user: { id: dbAdmin._id, name: dbAdmin.name, email: dbAdmin.email, phone: dbAdmin.phone, role: dbAdmin.role, isVerified: dbAdmin.isVerified } });
+                return;
+            }
+        }
+
+        // Fallback to .env credentials
         const adminEmail = process.env.ADMIN_EMAIL || 'admin@localkart.com';
         const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
         if (email !== adminEmail || password !== adminPassword) {
@@ -36,20 +49,22 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     }
 };
 
-// Dashboard statistics (enhanced with orders, reviews, reports)
+// Dashboard statistics
 export const getDashboardStats = async (req: Request, res: Response): Promise<void> => {
     try {
-        const [totalUsers, totalSellers, totalStores, totalProducts, activeProducts, inactiveProducts, verifiedStores, rejectedStores, pendingSellers, totalOrders, deliveredOrders, cancelledOrders, totalRevenue, totalReviews, openReports] = await Promise.all([
+        const [totalUsers, totalSellers, totalStores, totalProducts, activeProducts, inactiveProducts, pendingProducts, verifiedStores, rejectedStores, pendingSellers, totalOrders, deliveredOrders, cancelledOrders, totalRevenue, totalReviews, openReports, pendingKYC] = await Promise.all([
             User.countDocuments(), User.countDocuments({ role: 'seller' }), Store.countDocuments(), Product.countDocuments(),
-            Product.countDocuments({ isActive: true }), Product.countDocuments({ isActive: false }),
+            Product.countDocuments({ isActive: true, approvalStatus: 'approved' }), Product.countDocuments({ isActive: false }),
+            Product.countDocuments({ approvalStatus: 'pending' }),
             Store.countDocuments({ kycStatus: 'verified' }), Store.countDocuments({ kycStatus: 'rejected' }),
             Store.countDocuments({ kycStatus: { $in: ['pending', 'submitted'] } }),
             Order.countDocuments(), Order.countDocuments({ orderStatus: 'delivered' }), Order.countDocuments({ orderStatus: 'cancelled' }),
             Order.aggregate([{ $match: { paymentStatus: 'paid' } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
             Review.countDocuments(), FraudReport.countDocuments({ status: { $in: ['open', 'investigating'] } }),
+            User.countDocuments({ 'kyc.status': { $in: ['pending', 'submitted'] } }),
         ]);
         res.status(200).json({
-            success: true, stats: { totalUsers, totalSellers, totalStores, totalProducts, activeProducts, inactiveProducts, pendingSellers, verifiedStores, rejectedStores, totalOrders, deliveredOrders, cancelledOrders, totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0, totalReviews, openReports }
+            success: true, stats: { totalUsers, totalSellers, totalStores, totalProducts, activeProducts, inactiveProducts, pendingProducts, pendingSellers, verifiedStores, rejectedStores, totalOrders, deliveredOrders, cancelledOrders, totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0, totalReviews, openReports, pendingKYC }
         });
     } catch (error) {
         console.error('Dashboard stats error:', error);
@@ -110,19 +125,83 @@ export const rejectSeller = async (req: Request, res: Response): Promise<void> =
 // List all products for admin
 export const getAdminProducts = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { page = 1, limit = 20, status } = req.query;
+        const { page = 1, limit = 20, status, approvalStatus } = req.query;
         const query: any = {};
         if (status === 'active') query.isActive = true;
         else if (status === 'inactive') query.isActive = false;
+        if (approvalStatus && approvalStatus !== 'all') query.approvalStatus = approvalStatus;
         const products = await Product.find(query).populate('storeId', 'storeName ownerId city').sort({ createdAt: -1 }).skip((parseInt(page as string) - 1) * parseInt(limit as string)).limit(parseInt(limit as string));
         const total = await Product.countDocuments(query);
         res.status(200).json({
             success: true,
-            products: products.map(p => ({ id: p._id, name: p.name, description: p.description, price: p.price, category: p.category, stock: p.stock, isActive: p.isActive, isAvailable: p.isAvailable, imageUrl: p.thumbnailUrl || p.imageUrls?.[0] || '', store: p.storeId, totalSold: p.totalSold, rating: p.rating, createdAt: p.createdAt })),
+            products: products.map(p => ({ id: p._id, name: p.name, description: p.description, price: p.price, category: p.category, stock: p.stock, isActive: p.isActive, isAvailable: p.isAvailable, approvalStatus: p.approvalStatus, rejectionReason: p.rejectionReason, imageUrl: p.thumbnailUrl || p.imageUrls?.[0] || '', store: p.storeId, totalSold: p.totalSold, rating: p.rating, createdAt: p.createdAt })),
             total, page: parseInt(page as string), pages: Math.ceil(total / parseInt(limit as string)),
         });
     } catch (error) {
         console.error('Get admin products error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Get pending products for approval
+export const getPendingProducts = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { page = 1, limit = 20 } = req.query;
+        const products = await Product.find({ approvalStatus: 'pending' })
+            .populate('storeId', 'storeName ownerId city')
+            .populate('sellerId', 'name email phone')
+            .sort({ createdAt: -1 })
+            .skip((parseInt(page as string) - 1) * parseInt(limit as string))
+            .limit(parseInt(limit as string));
+        const total = await Product.countDocuments({ approvalStatus: 'pending' });
+        res.status(200).json({
+            success: true,
+            products: products.map(p => ({
+                id: p._id, name: p.name, description: p.description, price: p.price,
+                category: p.category, stock: p.stock, unit: p.unit,
+                imageUrl: p.thumbnailUrl || p.imageUrls?.[0] || '',
+                imageUrls: p.imageUrls, store: p.storeId, seller: p.sellerId,
+                createdAt: p.createdAt
+            })),
+            total, page: parseInt(page as string), pages: Math.ceil(total / parseInt(limit as string)),
+        });
+    } catch (error) {
+        console.error('Get pending products error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Approve a product
+export const approveProduct = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const product = await Product.findById(id);
+        if (!product) { res.status(404).json({ success: false, message: 'Product not found' }); return; }
+        product.approvalStatus = 'approved';
+        product.isActive = true;
+        product.rejectionReason = undefined;
+        await product.save();
+        res.status(200).json({ success: true, message: 'Product approved successfully' });
+    } catch (error) {
+        console.error('Approve product error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Reject a product
+export const rejectProduct = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const product = await Product.findById(id);
+        if (!product) { res.status(404).json({ success: false, message: 'Product not found' }); return; }
+        product.approvalStatus = 'rejected';
+        product.isActive = false;
+        product.rejectionReason = reason || 'Product does not meet guidelines';
+        await product.save();
+        res.status(200).json({ success: true, message: 'Product rejected' });
+    } catch (error) {
+        console.error('Reject product error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
@@ -150,7 +229,7 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
         if (search) {
             query.$or = [{ name: { $regex: search, $options: 'i' } }, { email: { $regex: search, $options: 'i' } }, { phone: { $regex: search, $options: 'i' } }];
         }
-        const users = await User.find(query).select('name email phone role isVerified isActive createdAt').sort({ createdAt: -1 }).skip((parseInt(page as string) - 1) * parseInt(limit as string)).limit(parseInt(limit as string));
+        const users = await User.find(query).select('name email phone role isVerified isActive kyc.status createdAt').sort({ createdAt: -1 }).skip((parseInt(page as string) - 1) * parseInt(limit as string)).limit(parseInt(limit as string));
         const total = await User.countDocuments(query);
         res.status(200).json({ success: true, users, total, page: parseInt(page as string), pages: Math.ceil(total / parseInt(limit as string)) });
     } catch (error) {
@@ -175,6 +254,57 @@ export const getAllOrders = async (req: Request, res: Response): Promise<void> =
         });
     } catch (error) {
         console.error('Get all orders error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Get pending KYC for admin review
+export const getPendingKYC = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { page = 1, limit = 20 } = req.query;
+        const users = await User.find({ 'kyc.status': { $in: ['pending', 'submitted'] } })
+            .select('name email phone role kyc createdAt')
+            .sort({ 'kyc.submittedAt': -1 })
+            .skip((parseInt(page as string) - 1) * parseInt(limit as string))
+            .limit(parseInt(limit as string));
+        const total = await User.countDocuments({ 'kyc.status': { $in: ['pending', 'submitted'] } });
+        res.status(200).json({ success: true, users, total, page: parseInt(page as string), pages: Math.ceil(total / parseInt(limit as string)) });
+    } catch (error) {
+        console.error('Get pending KYC error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Approve KYC
+export const approveKYC = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const user = await User.findById(id);
+        if (!user) { res.status(404).json({ success: false, message: 'User not found' }); return; }
+        user.kyc.status = 'verified';
+        user.kyc.verifiedAt = new Date();
+        user.isVerified = true;
+        await user.save();
+        res.status(200).json({ success: true, message: 'KYC approved' });
+    } catch (error) {
+        console.error('Approve KYC error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// Reject KYC
+export const rejectKYC = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const user = await User.findById(id);
+        if (!user) { res.status(404).json({ success: false, message: 'User not found' }); return; }
+        user.kyc.status = 'rejected';
+        user.kyc.rejectionReason = reason || 'Documents not valid';
+        await user.save();
+        res.status(200).json({ success: true, message: 'KYC rejected' });
+    } catch (error) {
+        console.error('Reject KYC error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };

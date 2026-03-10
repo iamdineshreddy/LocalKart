@@ -30,6 +30,11 @@ export interface IKYCVerification extends Document {
     rejectionReason?: string;
     aadhaarDocUrl?: string;
     panDocUrl?: string;
+    upiId?: string;
+    fullAddress?: string;
+    selfieUrl?: string;
+    faceMatchScore?: number;
+    faceMatchStatus?: 'not_started' | 'passed' | 'failed' | 'manual_review';
 }
 
 export interface IUser extends Document {
@@ -86,7 +91,16 @@ const KYCSchema = new Schema<IKYCVerification>({
     verifiedAt: { type: Date },
     rejectionReason: { type: String },
     aadhaarDocUrl: { type: String },
-    panDocUrl: { type: String }
+    panDocUrl: { type: String },
+    upiId: { type: String },
+    fullAddress: { type: String },
+    selfieUrl: { type: String },
+    faceMatchScore: { type: Number },
+    faceMatchStatus: {
+        type: String,
+        enum: ['not_started', 'passed', 'failed', 'manual_review'],
+        default: 'not_started'
+    }
 });
 
 const UserSchema = new Schema<IUser>({

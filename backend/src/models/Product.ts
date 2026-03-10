@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IProduct extends Document {
     storeId: mongoose.Types.ObjectId;
+    sellerId: mongoose.Types.ObjectId;
     name: string;
     description: string;
     price: number;
@@ -14,6 +15,8 @@ export interface IProduct extends Document {
     stock: number;
     isAvailable: boolean;
     isActive: boolean;
+    approvalStatus: 'pending' | 'approved' | 'rejected';
+    rejectionReason?: string;
     brand?: string;
     tags: string[];
     expiryDate?: Date;
@@ -33,6 +36,7 @@ export interface IProduct extends Document {
 
 const ProductSchema = new Schema<IProduct>({
     storeId: { type: Schema.Types.ObjectId, ref: 'Store', required: true },
+    sellerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true },
     description: { type: String, required: true },
     price: { type: Number, required: true },
@@ -45,6 +49,12 @@ const ProductSchema = new Schema<IProduct>({
     stock: { type: Number, default: 0 },
     isAvailable: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true },
+    approvalStatus: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+    },
+    rejectionReason: { type: String },
     brand: { type: String },
     tags: [{ type: String }],
     expiryDate: { type: Date },

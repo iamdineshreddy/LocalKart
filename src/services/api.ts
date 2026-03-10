@@ -167,7 +167,7 @@ class ApiService {
         return this.request('/kyc/digilocker/initiate');
     }
 
-    async submitKYC(data: { aadhaarNumber: string; panNumber: string }) {
+    async submitKYC(data: { aadhaarNumber: string; panNumber: string; aadhaarDocUrl?: string; panDocUrl?: string; upiId?: string; fullAddress?: string; selfieUrl?: string; faceMatchScore?: number; faceMatchStatus?: string; fullName?: string; phone?: string }) {
         return this.request('/kyc/submit', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -200,8 +200,21 @@ class ApiService {
         });
     }
 
-    async getMyOrders() {
-        return this.request('/orders/me');
+    async getMyOrders(status?: string, page: number = 1) {
+        let url = `/orders?page=${page}`;
+        if (status) url += `&status=${status}`;
+        return this.request(url);
+    }
+
+    async getOrderDetails(orderId: string) {
+        return this.request(`/orders/${orderId}`);
+    }
+
+    async cancelOrder(orderId: string, reason?: string) {
+        return this.request(`/orders/${orderId}/cancel`, {
+            method: 'PUT',
+            body: JSON.stringify({ reason }),
+        });
     }
 
     // Store endpoints
@@ -335,9 +348,10 @@ class ApiService {
         });
     }
 
-    async getAdminProducts(page: number = 1, limit: number = 20, status?: string) {
+    async getAdminProducts(page: number = 1, limit: number = 20, status?: string, approvalStatus?: string) {
         let url = `/admin/products?page=${page}&limit=${limit}`;
         if (status && status !== 'all') url += `&status=${status}`;
+        if (approvalStatus && approvalStatus !== 'all') url += `&approvalStatus=${approvalStatus}`;
         return this.request(url);
     }
 
@@ -345,6 +359,92 @@ class ApiService {
         return this.request(`/admin/products/${productId}/toggle`, {
             method: 'PUT',
             body: JSON.stringify({ isActive }),
+        });
+    }
+
+    // Admin product approval
+    async getPendingProducts(page: number = 1) {
+        return this.request(`/admin/products/pending?page=${page}`);
+    }
+
+    async approveProduct(productId: string) {
+        return this.request(`/admin/products/${productId}/approve`, { method: 'PUT' });
+    }
+
+    async rejectProduct(productId: string, reason?: string) {
+        return this.request(`/admin/products/${productId}/reject`, {
+            method: 'PUT',
+            body: JSON.stringify({ reason }),
+        });
+    }
+
+    // Admin KYC management
+    async getPendingKYC(page: number = 1) {
+        return this.request(`/admin/kyc/pending?page=${page}`);
+    }
+
+    async approveKYC(userId: string) {
+        return this.request(`/admin/kyc/${userId}/approve`, { method: 'PUT' });
+    }
+
+    async rejectKYC(userId: string, reason?: string) {
+        return this.request(`/admin/kyc/${userId}/reject`, {
+            method: 'PUT',
+            body: JSON.stringify({ reason }),
+        });
+    }
+
+    // Admin users
+    async getAdminUsers(page: number = 1, limit: number = 20, role?: string, search?: string) {
+        let url = `/admin/users?page=${page}&limit=${limit}`;
+        if (role && role !== 'all') url += `&role=${role}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        return this.request(url);
+    }
+
+    // Admin orders
+    async getAdminOrders(page: number = 1, limit: number = 20, status?: string) {
+        let url = `/admin/orders?page=${page}&limit=${limit}`;
+        if (status && status !== 'all') url += `&status=${status}`;
+        return this.request(url);
+    }
+
+    // Seller dashboard endpoints
+    async getSellerDashboard() {
+        return this.request('/seller/dashboard');
+    }
+
+    async getSellerOrders(status?: string, page: number = 1) {
+        let url = `/seller/orders?page=${page}`;
+        if (status) url += `&status=${status}`;
+        return this.request(url);
+    }
+
+    async updateOrderStatus(orderId: string, status: string, note?: string) {
+        return this.request(`/seller/orders/${orderId}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status, note }),
+        });
+    }
+
+    async getSellerEarnings() {
+        return this.request('/seller/earnings');
+    }
+
+    async getSellerInventory(category?: string, lowStock?: boolean) {
+        let url = '/seller/inventory';
+        const params = new URLSearchParams();
+        if (category) params.append('category', category);
+        if (lowStock) params.append('lowStock', 'true');
+        const q = params.toString();
+        if (q) url += `?${q}`;
+        return this.request(url);
+    }
+
+    async updateProductStock(productId: string, stock: number) {
+        return this.request(`/seller/inventory/${productId}/stock`, {
+            method: 'PUT',
+            body: JSON.stringify({ stock }),
         });
     }
 

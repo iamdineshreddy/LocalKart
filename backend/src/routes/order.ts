@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { createOrder, getMyOrders } from '../controllers/orderController';
 import { authenticate } from '../middleware/auth';
-import { orderValidation } from '../middleware/validate';
+import { createOrder, getMyOrders, getOrderDetails, cancelOrder } from '../controllers/orderController';
 
 const router = Router();
 
-router.post('/', authenticate, orderValidation, createOrder);
-router.get('/me', authenticate, getMyOrders);
+router.post('/', authenticate, createOrder);
+router.get('/', authenticate, getMyOrders);
+router.get('/:id', authenticate, getOrderDetails);
+router.put('/:id/cancel', authenticate, cancelOrder);
 
 export default router;

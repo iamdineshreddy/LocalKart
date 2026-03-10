@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User as UserType } from '../types';
 import api from '../services/api';
 import { auth, RecaptchaVerifier, signInWithPhoneNumber, isFirebaseConfigured } from '../services/firebaseConfig';
 import type { ConfirmationResult } from '../services/firebaseConfig';
 import {
     Phone, Shield, User, ArrowRight, CheckCircle,
-    Sparkles, Loader2, Store, Mail, Lock, Eye, EyeOff, UserPlus, LogIn
+    Sparkles, Loader2, Store, Mail, Lock, Eye, EyeOff, UserPlus, LogIn, Home
 } from 'lucide-react';
+import Particles, { initParticlesEngine } from '@tsparticles/react';
+import { loadSlim } from '@tsparticles/slim';
 
 interface LoginPageProps {
     handleLogin: (userData: UserType) => void;
@@ -37,6 +39,63 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
     const [nameInput, setNameInput] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [emailIsSeller, setEmailIsSeller] = useState(false);
+
+    // --- tsparticles Setup ---
+    const [particlesReady, setParticlesReady] = useState(false);
+
+    useEffect(() => {
+        initParticlesEngine(async (engine) => {
+            await loadSlim(engine);
+        }).then(() => {
+            setParticlesReady(true);
+        });
+    }, []);
+
+    const particlesOptions = useMemo(() => ({
+        background: { color: { value: "#0a0c10" } }, // Dark gradient-like initial color
+        fpsLimit: 120,
+        interactivity: {
+            events: {
+                onClick: { enable: true, mode: "push" },
+                onHover: { enable: true, mode: "repulse" },
+                resize: { enable: true }
+            },
+            modes: {
+                push: { quantity: 4 },
+                repulse: { distance: 150, duration: 0.4 }
+            }
+        },
+        particles: {
+            color: {
+                value: ["#ff0055", "#00ffcc", "#00aaff", "#aa00ff", "#ffcc00"] // RGB glowing tones
+            },
+            links: {
+                color: "#ffffff",
+                distance: 150,
+                enable: true,
+                opacity: 0.15,
+                width: 1
+            },
+            move: {
+                direction: "none" as const,
+                enable: true,
+                outModes: { default: "bounce" as const },
+                random: true,
+                speed: 1.5,
+                straight: false
+            },
+            number: {
+                density: { enable: true, area: 800 },
+                value: 80
+            },
+            opacity: { value: 0.7 },
+            shape: { type: "circle" },
+            size: {
+                value: { min: 2, max: 6 }
+            }
+        },
+        detectRetina: true
+    }), []);
 
     // Countdown timer for resend
     useEffect(() => {
@@ -247,7 +306,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
         setError('');
         try {
             // Route admin credentials to the admin login endpoint
-            const isAdminEmail = emailInput.toLowerCase() === 'admin@localkart.com';
+            const isAdminEmail = emailInput.toLowerCase() === 'admin@localkart.com' || emailInput.toLowerCase() === 'admin@test.com';
             const res = isAdminEmail
                 ? await api.adminLogin(emailInput, passwordInput)
                 : await api.emailLogin(emailInput, passwordInput);
@@ -306,35 +365,87 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
     // Prefill test credentials
     const fillTestLogin = (email: string) => {
         setEmailInput(email);
-        setPasswordInput('Test@123');
+        setPasswordInput(email.includes('admin') ? 'admin123' : '123456');
         setError('');
     };
 
     return (
-        <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-            <div className="w-full max-w-md">
+        <div style={{
+            position: 'relative',
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            fontFamily: "'Inter', sans-serif",
+            overflow: 'hidden',
+            backgroundColor: '#0a0c10' // Base dark color
+        }}>
+            {/* Animated Particles Background */}
+            {particlesReady && (
+                <Particles
+                    id="tsparticles"
+                    options={particlesOptions}
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        zIndex: 0
+                    }}
+                />
+            )}
+
+            {/* Dark overlay for extra depth */}
+            <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                background: 'radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.6) 100%)',
+                zIndex: 1,
+                pointerEvents: 'none'
+            }} />
+
+            {/* Back to Home Button */}
+            <button
+                onClick={() => window.location.href = '/'}
+                style={{
+                    position: 'absolute', top: 24, left: 24, zIndex: 10,
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: 'rgba(255,255,255,0.1)', color: 'white',
+                    border: '1px solid rgba(255,255,255,0.2)', padding: '10px 16px', borderRadius: 24,
+                    fontSize: 14, fontWeight: 500, cursor: 'pointer', backdropFilter: 'blur(10px)'
+                }}
+            >
+                <Home size={18} /> Back to Home
+            </button>
+
+            <div style={{ width: '100%', maxWidth: 460, zIndex: 10, position: 'relative' }}>
                 {/* Logo */}
                 <div className="text-center mb-8">
-                    <span className="text-5xl brand-font text-blue-900 tracking-tighter">
-                        Local<span className="text-blue-600">Kart</span>
+                    <span className="text-5xl brand-font text-white tracking-tighter drop-shadow-lg">
+                        Local<span className="text-blue-400">Kart</span>
                     </span>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mt-2">
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.25em] mt-2">
                         Your Neighborhood, Faster
                     </p>
                 </div>
 
                 {/* Auth Mode Toggle */}
-                <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl">
+                <div className="flex gap-2 mb-6 bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/20">
                     <button
                         onClick={() => { setAuthMode('email'); setError(''); }}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-extrabold transition-all ${authMode === 'email' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-extrabold transition-all ${authMode === 'email' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'
                             }`}
                     >
                         <Mail className="h-4 w-4" /> Email
                     </button>
                     <button
                         onClick={() => { setAuthMode('phone'); setError(''); }}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-extrabold transition-all ${authMode === 'phone' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-extrabold transition-all ${authMode === 'phone' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'
                             }`}
                     >
                         <Phone className="h-4 w-4" /> Phone OTP
@@ -342,7 +453,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
                 </div>
 
                 {/* Card */}
-                <div className="bg-white p-8 sm:p-10 rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-blue-900/5 relative overflow-hidden">
+                <div className="bg-white/95 backdrop-blur-xl p-8 sm:p-10 rounded-[2.5rem] border border-white/20 shadow-2xl relative overflow-hidden">
                     {/* Decorative gradient */}
                     <div className="absolute -top-24 -right-24 w-48 h-48 bg-gradient-to-br from-blue-100 to-blue-50 rounded-full opacity-60" />
                     <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-gradient-to-tr from-blue-50 to-transparent rounded-full opacity-40" />
@@ -437,14 +548,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ handleLogin }) => {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => { setEmailInput('admin@localkart.com'); setPasswordInput('Admin@123'); setError(''); }}
+                                                    onClick={() => fillTestLogin('admin@test.com')}
                                                     className="flex-1 bg-amber-50 text-amber-700 py-2.5 rounded-xl text-xs font-black hover:bg-amber-100 transition-all"
                                                 >
                                                     🛡️ Admin
                                                 </button>
                                             </div>
                                             <p className="text-[9px] text-slate-400 font-medium mt-2 text-center">
-                                                Passwords: <span className="font-bold text-slate-600">Test@123</span> (Users) | <span className="font-bold text-slate-600">Admin@123</span> (Admin)
+                                                Passwords: <span className="font-bold text-slate-600">123456</span> (Users) | <span className="font-bold text-slate-600">admin123</span> (Admin)
                                             </p>
                                         </div>
                                     </form>
